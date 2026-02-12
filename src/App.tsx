@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Dashboard from "./pages/Dashboard";
 import DashboardProfilePage from "./pages/dashboard/DashboardProfilePage";
 import DashboardDesignPage from "./pages/dashboard/DashboardDesignPage";
@@ -56,6 +57,7 @@ const queryClient = new QueryClient();
 // Inner component that can use useLocation hook
 const AppRoutes = ({ showSplash, setShowSplash }: { showSplash: boolean; setShowSplash: (value: boolean) => void }) => {
   const location = useLocation();
+  const prefersReducedMotion = useReducedMotion();
   const previousPathRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -111,68 +113,82 @@ const AppRoutes = ({ showSplash, setShowSplash }: { showSplash: boolean; setShow
   }
 
   return (
-    <Routes>
-      {/* Global layout applying Dashboard background */}
-      <Route element={<PageLayout />}>
-        <Route path="/" element={<DashboardProfilePage />} />
-        <Route path="/dashboard" element={<DashboardProfilePage />} />
-        <Route path="/dashboard/profile" element={<DashboardProfilePage />} />
-        <Route path="/dashboard/design" element={<DashboardDesignPage />} />
-        <Route path="/dashboard/analytics" element={<DashboardAnalyticsPage />} />
-        <Route path="/dashboard/ad-network" element={<DashboardAdNetworkPage />} />
-        <Route path="/dashboard/monetization" element={<DashboardMonetizationPage />} />
-        <Route path="/dashboard/memberships" element={<DashboardMembershipsPage />} />
-        <Route path="/dashboard/subscription" element={<DashboardSubscriptionPage />} />
-        <Route path="/dashboard/preferences" element={<DashboardPreferencesPage />} />
-        <Route path="/dashboard/payments" element={<Dashboard initialTab="payments" hideTabNavigation />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/subscription" element={<Subscription />} />
-        <Route path="/voting" element={<VotingPage />} />
-        <Route path="/followers" element={<Followers />} />
-        <Route path="/wallet" element={<Wallet />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/card-generator" element={<CardGenerator />} />
-        <Route path="/ai-support" element={<AISupport />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/domain" element={<CustomDomain />} />
-        <Route path="/admin-mrwain" element={<AdminMrwain />} />
-        {/* Payment routes */}
-        <Route path="/payment-success" element={<PaymentSuccess />} />
-        <Route path="/payment-cancel" element={<PaymentCancel />} />
-        <Route path="/pay/:linkId" element={<PaymentPage />} />
-        <Route path="/search-users" element={<UserSearchPage />} />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="/switch-to-merchant" element={<SwitchToMerchant />} />
-        <Route path="/merchant-setup" element={<MerchantStoreSetup />} />
-        <Route path="/merchant-products" element={<MerchantProductManager />} />
-        <Route path="/store/:merchantId" element={<MerchantStorePreview />} />
-        <Route path="/storefront/:storeId" element={<StoreFront />} />
-        <Route path="/inbox" element={<InboxPage />} />
-        <Route path="/chat/:username" element={<Chat />} />
-        <Route path="/chat/g/:groupId" element={<GroupChatPage />} />
-        <Route path="/purchases" element={<Purchases />} />
-        <Route path="/affiliate-program" element={<AffiliateProgram />} />
-        <Route path="/ambassador-program" element={<CommunityProgram role="ambassador" />} />
-        <Route path="/moderator-program" element={<CommunityProgram role="moderator" />} />
-        <Route path="/sales-earnings" element={<SalesEarnings />} />
-        <Route path="/product/:productId" element={<ProductDetail />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-      {/* Public Bio routes excluded from global layout */}
-      <Route path="/auth" element={<PiAuth />} />
-      <Route path="/login" element={<EmailAuth />} />
-      <Route path="/email-auth" element={<EmailAuth />} />
-      {/* Public bio + feed routes */}
-      <Route path="/u/:username" element={<PublicBio />} />
-      <Route path="/profile/:username" element={<PublicBio />} />
-      <Route path="/@:username" element={<PublicBio />} />
-      <Route path="/@:username/feed" element={<ProfileFeed />} />
-      <Route path="/u/:username/feed" element={<ProfileFeed />} />
-      <Route path="/profile/:username/feed" element={<ProfileFeed />} />
-      <Route path=":username/feed" element={<ProfileFeed />} />
-      <Route path=":username" element={<PublicBio />} />
-    </Routes>
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={location.pathname}
+        initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 12, scale: 0.995, filter: "blur(6px)" }}
+        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+        exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -8, scale: 1.002, filter: "blur(3px)" }}
+        transition={
+          prefersReducedMotion
+            ? { duration: 0.01 }
+            : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
+        }
+      >
+        <Routes location={location}>
+          {/* Global layout applying Dashboard background */}
+          <Route element={<PageLayout />}>
+            <Route path="/" element={<DashboardProfilePage />} />
+            <Route path="/dashboard" element={<DashboardProfilePage />} />
+            <Route path="/dashboard/profile" element={<DashboardProfilePage />} />
+            <Route path="/dashboard/design" element={<DashboardDesignPage />} />
+            <Route path="/dashboard/analytics" element={<DashboardAnalyticsPage />} />
+            <Route path="/dashboard/ad-network" element={<DashboardAdNetworkPage />} />
+            <Route path="/dashboard/monetization" element={<DashboardMonetizationPage />} />
+            <Route path="/dashboard/memberships" element={<DashboardMembershipsPage />} />
+            <Route path="/dashboard/subscription" element={<DashboardSubscriptionPage />} />
+            <Route path="/dashboard/preferences" element={<DashboardPreferencesPage />} />
+            <Route path="/dashboard/payments" element={<Dashboard initialTab="payments" hideTabNavigation />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/subscription" element={<Subscription />} />
+            <Route path="/voting" element={<VotingPage />} />
+            <Route path="/followers" element={<Followers />} />
+            <Route path="/wallet" element={<Wallet />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/card-generator" element={<CardGenerator />} />
+            <Route path="/ai-support" element={<AISupport />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/domain" element={<CustomDomain />} />
+            <Route path="/admin-mrwain" element={<AdminMrwain />} />
+            {/* Payment routes */}
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/payment-cancel" element={<PaymentCancel />} />
+            <Route path="/pay/:linkId" element={<PaymentPage />} />
+            <Route path="/search-users" element={<UserSearchPage />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/switch-to-merchant" element={<SwitchToMerchant />} />
+            <Route path="/merchant-setup" element={<MerchantStoreSetup />} />
+            <Route path="/merchant-products" element={<MerchantProductManager />} />
+            <Route path="/store/:merchantId" element={<MerchantStorePreview />} />
+            <Route path="/storefront/:storeId" element={<StoreFront />} />
+            <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/chat/:username" element={<Chat />} />
+            <Route path="/chat/g/:groupId" element={<GroupChatPage />} />
+            <Route path="/purchases" element={<Purchases />} />
+            <Route path="/affiliate-program" element={<AffiliateProgram />} />
+            <Route path="/ambassador-program" element={<CommunityProgram role="ambassador" />} />
+            <Route path="/moderator-program" element={<CommunityProgram role="moderator" />} />
+            <Route path="/sales-earnings" element={<SalesEarnings />} />
+            <Route path="/product/:productId" element={<ProductDetail />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+          {/* Public Bio routes excluded from global layout */}
+          <Route path="/auth" element={<PiAuth />} />
+          <Route path="/login" element={<EmailAuth />} />
+          <Route path="/email-auth" element={<EmailAuth />} />
+          {/* Public bio + feed routes */}
+          <Route path="/u/:username" element={<PublicBio />} />
+          <Route path="/profile/:username" element={<PublicBio />} />
+          <Route path="/@:username" element={<PublicBio />} />
+          <Route path="/@:username/feed" element={<ProfileFeed />} />
+          <Route path="/u/:username/feed" element={<ProfileFeed />} />
+          <Route path="/profile/:username/feed" element={<ProfileFeed />} />
+          <Route path=":username/feed" element={<ProfileFeed />} />
+          <Route path=":username" element={<PublicBio />} />
+        </Routes>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
