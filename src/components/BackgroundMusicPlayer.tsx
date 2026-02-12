@@ -64,6 +64,7 @@ export const BackgroundMusicPlayer = ({
 }: BackgroundMusicPlayerProps) => {
   const provider = getMusicProvider(musicUrl);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const lastVolumeRef = useRef(0.3);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.3); // Default to 30% volume
   const [isMuted, setIsMuted] = useState(false);
@@ -71,29 +72,43 @@ export const BackgroundMusicPlayer = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [error, setError] = useState(false);
 
-  // Initialize audio element for direct audio URLs only
+  // Initialize source for direct audio URLs only.
   useEffect(() => {
     if (provider !== 'audio' || !musicUrl || !audioRef.current) return;
 
     const audio = audioRef.current;
     audio.src = musicUrl;
-    audio.volume = volume;
     audio.loop = loop;
-
-    if (autoPlay) {
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => setIsPlaying(true))
-          .catch(() => setIsPlaying(false)); // Auto-play might be blocked
-      }
-    }
+    audio.load();
 
     return () => {
       audio.pause();
       audio.currentTime = 0;
     };
-  }, [musicUrl, autoPlay, loop, provider, volume]);
+  }, [musicUrl, loop, provider]);
+
+  // Keep mute/volume in sync without resetting the media source.
+  useEffect(() => {
+    if (provider !== 'audio' || !audioRef.current) return;
+    const audio = audioRef.current;
+    audio.muted = isMuted;
+    audio.volume = volume;
+    if (volume > 0) {
+      lastVolumeRef.current = volume;
+    }
+  }, [provider, isMuted, volume]);
+
+  // Attempt autoplay when allowed.
+  useEffect(() => {
+    if (provider !== 'audio' || !audioRef.current || !autoPlay) return;
+    const audio = audioRef.current;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+    }
+  }, [provider, musicUrl, autoPlay]);
 
   // Handle play/pause (audio provider only)
   const handlePlayPause = () => {
@@ -116,20 +131,17 @@ export const BackgroundMusicPlayer = ({
     if (provider !== 'audio') return;
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
-    if (audioRef.current) {
-      audioRef.current.volume = newVolume;
-      setIsMuted(false);
-    }
+    setIsMuted(newVolume === 0);
   };
 
   // Handle mute/unmute (audio provider only)
   const handleMuteToggle = () => {
     if (provider !== 'audio' || !audioRef.current) return;
     if (isMuted) {
-      audioRef.current.volume = volume;
+      const restoredVolume = lastVolumeRef.current > 0 ? lastVolumeRef.current : 0.3;
+      setVolume(restoredVolume);
       setIsMuted(false);
     } else {
-      audioRef.current.volume = 0;
       setIsMuted(true);
     }
   };
@@ -242,6 +254,8 @@ export const BackgroundMusicPlayer = ({
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
         onError={handleError}
         crossOrigin="anonymous"

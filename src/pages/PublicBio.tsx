@@ -1003,7 +1003,7 @@ const PublicBio = () => {
     if (!videoRef.current) return;
     videoRef.current.muted = isVideoMuted;
     if (!isVideoMuted) {
-      videoRef.current.volume = 0.5;
+      videoRef.current.volume = 1;
     }
   }, [isVideoMuted]);
 
@@ -1058,6 +1058,7 @@ const PublicBio = () => {
     profile.theme.backgroundType === 'video' &&
     !!profile.theme.backgroundVideo &&
     isDirectVideoFileUrl(profile.theme.backgroundVideo);
+  const profileShareUrl = `${window.location.origin}/u/${profile.username}`;
 
   return (
     <div 
@@ -1149,10 +1150,12 @@ const PublicBio = () => {
                 setIsVideoMuted(nextMuted);
                 if (shouldUseNativeBackgroundVideo && videoRef.current) {
                   videoRef.current.muted = nextMuted;
-                  videoRef.current.volume = nextMuted ? 0 : 0.6;
-                  if (!nextMuted && isVideoPlaying && videoRef.current.paused) {
+                  videoRef.current.volume = nextMuted ? 0 : 1;
+                  if (!nextMuted) {
                     void videoRef.current.play().catch(() => {});
                   }
+                } else if (!nextMuted) {
+                  setIsVideoPlaying(true);
                 }
               }}
               className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 text-white border border-white/20 backdrop-blur-sm transition-all"
@@ -1223,48 +1226,49 @@ const PublicBio = () => {
       )}
       
       <div className="w-full max-w-full sm:max-w-2xl space-y-8 py-12 relative z-10 overflow-x-hidden px-2 sm:px-0">
+        <div className="mb-6 flex items-center justify-between gap-3">
+          {profile.showShareButton ? (
+            <Button
+              onClick={() => setShowShareDialog(true)}
+              variant="ghost"
+              size="icon"
+              className="hover:bg-white/10 transition-all duration-200"
+            >
+              <Share2 className="w-6 h-6 text-white hover:text-cyan-400" />
+            </Button>
+          ) : (
+            <div />
+          )}
+          {planAllowsPiAds && userPreferences?.store_settings?.showPiAds !== false && (
+            piAdsOpen ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="bg-white/90 text-sky-700 hover:bg-white"
+                onClick={() => setPiAdsOpen(false)}
+              >
+                Hide Ads
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-white hover:text-white/80 hover:bg-transparent"
+                onClick={() => setPiAdsOpen(true)}
+              >
+                <Zap className="w-5 h-5" />
+              </Button>
+            )
+          )}
+        </div>
+
         {/* Pi AdNetwork logic based on creator's plan and creator preference */}
-        {planAllowsPiAds && userPreferences?.store_settings?.showPiAds !== false && (
+        {planAllowsPiAds && userPreferences?.store_settings?.showPiAds !== false && piAdsOpen && (
           <div className="mb-6">
-            <div className="flex items-center justify-between gap-3">
-              {profile.showShareButton && (
-                <Button
-                  onClick={() => setShowShareDialog(true)}
-                  variant="ghost"
-                  size="icon"
-                  className="hover:bg-white/10 transition-all duration-200"
-                >
-                  <Share2 className="w-6 h-6 text-white hover:text-cyan-400" />
-                </Button>
-              )}
-              {piAdsOpen ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="bg-white/90 text-sky-700 hover:bg-white"
-                  onClick={() => setPiAdsOpen(false)}
-                >
-                  Hide Ads
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-white hover:text-white/80 hover:bg-transparent"
-                  onClick={() => setPiAdsOpen(true)}
-                >
-                  <Zap className="w-5 h-5" />
-                </Button>
-              )}
+            <PiAdsBanner />
+            <div className="mt-4">
+              <PiAdNetwork />
             </div>
-            {piAdsOpen && (
-              <div className="mt-4">
-                <PiAdsBanner />
-                <div className="mt-4">
-                  <PiAdNetwork />
-                </div>
-              </div>
-            )}
           </div>
         )}
         
@@ -2339,7 +2343,7 @@ const PublicBio = () => {
             <div className="w-full">
               <VirtualCard
                 username={profile.username}
-                storeUrl={`${window.location.origin}/u/${profile.username}`}
+                storeUrl={profileShareUrl}
                 frontColor={profile.card_front_color || "#2bbdee"}
                 backColor={profile.card_back_color || "#2bbdee"}
                 textColor={profile.card_text_color || "#000000"}
@@ -2353,8 +2357,7 @@ const PublicBio = () => {
             <Button
               className="w-full bg-sky-500 hover:bg-sky-600 text-white h-11"
               onClick={() => {
-                const profileUrl = `${window.location.origin}/${profile.storeUrl}`;
-                navigator.clipboard.writeText(profileUrl);
+                navigator.clipboard.writeText(profileShareUrl);
                 toast.success("Profile link copied!");
                 setShowShareDialog(false);
               }}
