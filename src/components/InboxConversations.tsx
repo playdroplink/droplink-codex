@@ -621,7 +621,7 @@ export default function InboxConversations() {
                       {conversation.subtext || conversation.name}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-300">
                     {conversation.unreadCount > 0 ? (
                         <span className="font-bold text-foreground truncate">
                              {conversation.lastMessage}
@@ -631,7 +631,7 @@ export default function InboxConversations() {
                              {conversation.lastMessage}
                         </span>
                     )}
-                    <span className="text-xs mx-1">â€¢</span>
+                    <span className="text-xs mx-1">•</span>
                     <span className="text-xs whitespace-nowrap">
                         {formatDistanceToNow(new Date(conversation.lastMessageTime), { addSuffix: false }).replace('about ', '').replace(' hours', 'h').replace(' minutes', 'm').replace(' days', 'd')}
                     </span>

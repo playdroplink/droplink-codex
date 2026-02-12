@@ -5,12 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Send, Image as ImageIcon, Loader2, X, ArrowLeft, Mic, Video } from 'lucide-react';
+import { Image as ImageIcon, X, ArrowLeft, Mic, Video, Moon, Sun, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
 import { uploadMessageImage, uploadMessageMedia } from '@/lib/supabase-storage';
-import { PageHeader } from '@/components/PageHeader';
-import { FooterNav } from '@/components/FooterNav';
 
 interface Message {
   id: string;
@@ -44,9 +41,14 @@ export default function ChatPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const gifInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video' | 'audio' | null>(null);
+  const [showMediaActions, setShowMediaActions] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -60,6 +62,18 @@ export default function ChatPage() {
       loadProfiles();
     }
   }, [piUser, username]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('inbox_theme_mode');
+    setIsDarkMode(saved === 'dark');
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('inbox_theme_mode', isDarkMode ? 'dark' : 'light');
+    const root = document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
 
   useEffect(() => {
     if (myProfileId && otherProfile?.id) {
@@ -247,6 +261,23 @@ export default function ChatPage() {
     }
   };
 
+  const selectGif = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'image/gif') {
+      toast.error('Please choose a GIF file');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('GIF must be less than 8MB');
+      return;
+    }
+    setSelectedMedia(file);
+    setMediaType('image');
+    setMediaPreview(URL.createObjectURL(file));
+    setShowMediaActions(false);
+  };
+
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -276,23 +307,39 @@ export default function ChatPage() {
     setMediaType(isImage ? 'image' : isVideo ? 'video' : 'audio');
     const previewUrl = URL.createObjectURL(file);
     setMediaPreview(previewUrl);
+    setShowMediaActions(false);
   };
 
   const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      toast.error('Voice recording not supported');
+    if (!window.isSecureContext) {
+      toast.error('Voice recording needs HTTPS. You can upload an audio file instead.');
+      audioInputRef.current?.click();
       return;
     }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast.error('Voice recording not supported on this device. Choose an audio file.');
+      audioInputRef.current?.click();
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const preferredMimeType = [
+        'audio/webm;codecs=opus',
+        'audio/mp4',
+        'audio/webm'
+      ].find((mime) => MediaRecorder.isTypeSupported?.(mime));
+      const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
       audioChunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+        const blobType = preferredMimeType || 'audio/webm';
+        const extension = blobType.includes('mp4') ? 'm4a' : 'webm';
+        const blob = new Blob(audioChunksRef.current, { type: blobType });
+        const file = new File([blob], `voice-${Date.now()}.${extension}`, { type: blobType });
         setSelectedMedia(file);
         setMediaType('audio');
         setMediaPreview(URL.createObjectURL(blob));
@@ -303,7 +350,8 @@ export default function ChatPage() {
       setRecording(true);
     } catch (error) {
       console.error('Voice record error:', error);
-      toast.error('Unable to start recording');
+      toast.error('Unable to start recording. Choose an audio file instead.');
+      audioInputRef.current?.click();
     }
   };
 
@@ -382,6 +430,7 @@ export default function ChatPage() {
       setNewMessage('');
       clearImage();
       clearMedia();
+      setShowMediaActions(false);
       setIsTyping(false);
       await loadMessages();
       toast.success('Message sent!');
@@ -438,7 +487,16 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+           <Button
+             variant="ghost"
+             size="icon"
+             className="h-8 w-8"
+             onClick={() => setIsDarkMode((prev) => !prev)}
+             title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+           >
+             {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+           </Button>
            {/* Call/Video icons placeholder */}
            <Button variant="ghost" size="icon" className="h-8 w-8">
              <svg aria-label="Audio Call" className="x1lliihq x1n2onr6 x5n08af" fill="currentColor" height="24" role="img" viewBox="0 0 24 24" width="24"><path d="M18.227 22.138a1.26 1.26 0 0 1-.9-.37l-2.074-2.073a1.99 1.99 0 0 1-.585-1.413 2 2 0 0 1 .586-1.414l.823-.823a.355.355 0 0 0-.022-.522l-4.522-4.521a.355.355 0 0 0-.522.022l-.823.823a1.99 1.99 0 0 1-1.414.586 2 2 0 0 1-1.414-.586L5.297 9.773a1.26 1.26 0 0 1-.366-.893c0-.332.13-.65.366-.894L7.54 5.743a2.98 2.98 0 0 1 2.277-.992 15.65 15.65 0 0 1 7.234 3.033 15.66 15.66 0 0 1 3.033 7.233 2.98 2.98 0 0 1-.992 2.278l-2.247 2.246a1.26 1.26 0 0 1-.893.366l.006.23Zm-11.53-9.528 4.52 4.52a2.35 2.35 0 0 0 3.328 0l2.073 2.073c.473.472.473 1.238 0 1.71l-2.247 2.246a.98.98 0 0 1-.75.328 13.67 13.67 0 0 1-6.315-2.647 13.66 13.66 0 0 1-2.646-6.315.98.98 0 0 1 .328-.75l2.246-2.247a1.21 1.21 0 0 1 1.71 0l-2.247-2.914Z"></path></svg>
@@ -574,18 +632,56 @@ export default function ChatPage() {
 
       {/* Input Area */}
       <div className="p-4 bg-background">
+        {showMediaActions && (
+          <div className="mb-3 rounded-2xl border border-border bg-card p-2 shadow-lg">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted"
+            >
+              Send Image
+            </button>
+            <button
+              type="button"
+              onClick={() => mediaInputRef.current?.click()}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted"
+            >
+              Photo Library / Files
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted"
+            >
+              Take Photo or Video
+            </button>
+            <button
+              type="button"
+              onClick={() => gifInputRef.current?.click()}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted"
+            >
+              Send GIF
+            </button>
+            <button
+              type="button"
+              onClick={() => audioInputRef.current?.click()}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted"
+            >
+              Send Audio File
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 rounded-full px-1 py-1 pr-2 border border-border/50">
            <Button
               type="button"
               variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-full text-blue-500 bg-blue-500/10 hover:bg-blue-500/20"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setShowMediaActions((prev) => !prev)}
               disabled={sending || uploadingImage}
             >
-              <div className="bg-blue-500 rounded-full p-1">
-                 <svg aria-label="Camera" className="x1lliihq x1n2onr6 x5n08af" fill="white" height="16" role="img" viewBox="0 0 24 24" width="16"><path d="M8.119 2.75a2.75 2.75 0 0 1 2.525-1.748h2.712a2.75 2.75 0 0 1 2.525 1.748l1.042 2.72a.75.75 0 0 0 .702.48h2.625A2.75 2.75 0 0 1 23 8.7v9.55A2.75 2.75 0 0 1 20.25 21H3.75A2.75 2.75 0 0 1 1 18.25V8.7a2.75 2.75 0 0 1 2.75-2.75h2.625a.75.75 0 0 0 .702-.48l1.042-2.72ZM12 7a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm0 1.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"></path></svg>
-              </div>
+              <Plus className="h-4 w-4" />
             </Button>
 
             <Button
@@ -593,10 +689,11 @@ export default function ChatPage() {
               variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-full text-indigo-500 bg-indigo-500/10 hover:bg-indigo-500/20"
-              onClick={() => mediaInputRef.current?.click()}
+              onClick={() => cameraInputRef.current?.click()}
               disabled={sending || uploadingImage}
+              title="Take photo or video"
             >
-              <Video className="w-4 h-4" />
+              <ImageIcon className="w-4 h-4" />
             </Button>
 
             <Button
@@ -621,6 +718,28 @@ export default function ChatPage() {
               ref={mediaInputRef}
               type="file"
               accept="image/*,video/*,audio/*"
+              className="hidden"
+              onChange={handleMediaSelect}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*,video/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleMediaSelect}
+            />
+            <input
+              ref={gifInputRef}
+              type="file"
+              accept="image/gif"
+              className="hidden"
+              onChange={selectGif}
+            />
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*"
               className="hidden"
               onChange={handleMediaSelect}
             />
@@ -696,10 +815,22 @@ export default function ChatPage() {
                 </Button>
             ) : (
                 <div className="flex items-center gap-1 mr-1">
-                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                      <svg aria-label="Voice Clip" className="x1lliihq x1n2onr6 x5n08af" fill="currentColor" height="24" role="img" viewBox="0 0 24 24" width="24"><path d="M19.5 10.671v.897a7.5 7.5 0 0 1-15 0v-.897a.75.75 0 0 1 1.5 0v.897a6 6 0 0 0 12 0v-.897a.75.75 0 0 1 1.5 0ZM12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M12 19.25a.75.75 0 0 1 .75.75v1.25H16a.75.75 0 0 1 0 1.5H8a.75.75 0 0 1 0-1.5h3.25V20a.75.75 0 0 1 .75-.75Z"></path></svg>
+                   <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground"
+                      onClick={() => (recording ? stopRecording() : startRecording())}
+                      title={recording ? 'Stop recording' : 'Record voice'}
+                   >
+                      <Mic className="h-5 w-5" />
                    </Button>
-                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                   <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground"
+                      onClick={() => mediaInputRef.current?.click()}
+                      title="Attach image/video/audio"
+                   >
                       <ImageIcon className="h-6 w-6" />
                    </Button>
                 </div>

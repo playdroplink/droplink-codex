@@ -20,10 +20,13 @@ export default function InboxPage() {
 
   useEffect(() => {
     localStorage.setItem("inbox_theme_mode", isDarkMode ? "dark" : "light");
+    const root = document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(isDarkMode ? "dark" : "light");
   }, [isDarkMode]);
 
   return (
-    <div className={isDarkMode ? "dark" : "light"}>
+    <div>
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-2xl mx-auto w-full">
           <div className="flex items-center justify-between px-4 pt-4">
@@ -37,7 +40,7 @@ export default function InboxPage() {
               onClick={() => setIsDarkMode((prev) => !prev)}
               title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
-              {isDarkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           </div>
           {!isAuthenticated && (
