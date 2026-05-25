@@ -254,7 +254,8 @@ export async function fetchA2uAdminDashboard(): Promise<A2uAdminDashboard> {
     });
     return result.data;
   } catch (edgeErr) {
-    if (isEdgeUnavailable(edgeErr instanceof Error ? edgeErr.message : String(edgeErr))) {
+    const msg = edgeErr instanceof Error ? edgeErr.message : String(edgeErr);
+    if (isEdgeUnavailable(msg) || msg.includes("Missing accessToken") || msg.includes("auth failed")) {
       return fetchAdminDashboardFromDb();
     }
     throw edgeErr;

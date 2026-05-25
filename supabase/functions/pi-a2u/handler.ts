@@ -664,7 +664,7 @@ export async function handlePiA2uRequest(
 
     if (action === "auth_verify") {
       const token = String(body?.accessToken || "");
-      if (!token) return json({ error: "Missing accessToken" }, 400);
+      if (!token) return json({ error: "Missing accessToken", action }, 400);
       const user = await verifyPiAccessToken(token);
       return json({ success: true, data: user });
     }
@@ -678,7 +678,7 @@ export async function handlePiA2uRequest(
     }
     if (action === "claim") {
       const token = String(body?.accessToken || "");
-      if (!token) return json({ error: "Missing accessToken" }, 401);
+      if (!token) return json({ error: "Missing accessToken", action }, 401);
       const user = await verifyPiAccessToken(token);
       const amount = Number(body?.amount ?? REWARD_AMOUNT);
       if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_CLAIM_AMOUNT) {
