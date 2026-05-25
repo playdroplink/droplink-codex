@@ -1,7 +1,10 @@
 // @ts-ignore-file - Deno edge function
 /// <reference lib="deno.ns" />
 declare const Deno: {
-  env: { get: (key: string) => string | undefined };
+  env: { 
+    get: (key: string) => string | undefined;
+    set: (key: string, value: string) => void;
+  };
 };
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import PiNetwork from "npm:pi-backend@0.1.3";

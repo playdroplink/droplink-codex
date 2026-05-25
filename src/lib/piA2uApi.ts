@@ -62,8 +62,13 @@ async function invokeViaFetch<T>(
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   const externalApiUrl = import.meta.env.VITE_PI_API_URL;
 
-  // Use VITE_PI_API_URL if it's set to a local/external endpoint (not Supabase)
-  const isExternalApi = externalApiUrl && !externalApiUrl.includes("supabase.co");
+  // Use VITE_PI_API_URL if it's set to a valid production endpoint (not localhost)
+  const isExternalApi = 
+    externalApiUrl && 
+    !externalApiUrl.includes("supabase.co") && 
+    !externalApiUrl.includes("localhost") && 
+    !externalApiUrl.includes("127.0.0.1");
+    
   const baseUrl = isExternalApi ? externalApiUrl : `${supabaseUrl}/functions/v1`;
 
   if (!baseUrl || (!isExternalApi && !anonKey)) {
@@ -72,28 +77,33 @@ async function invokeViaFetch<T>(
 
   const url = isExternalApi ? baseUrl : `${baseUrl}/${functionName}`;
   
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${anonKey}`,
-      apikey: anonKey || "",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${anonKey}`,
+        apikey: anonKey || "",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const errMsg =
-      (payload as { error?: string })?.error ||
-      (payload as { message?: string })?.message ||
-      `HTTP ${res.status}`;
-    throw new Error(errMsg);
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errMsg =
+        (payload as { error?: string })?.error ||
+        (payload as { message?: string })?.message ||
+        `HTTP ${res.status}`;
+      throw new Error(errMsg);
+    }
+    if ((payload as { error?: string })?.error) {
+      throw new Error((payload as { error: string }).error);
+    }
+    return payload as T;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`${msg} (Target: ${url})`);
   }
-  if ((payload as { error?: string })?.error) {
-    throw new Error((payload as { error: string }).error);
-  }
-  return payload as T;
 }
 
 async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
@@ -102,6 +112,7 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
 
   for (const functionName of FUNCTION_NAMES) {
     try {
+      // First try standard supabase-js invocation
       const { data, error } = await supabase.functions.invoke(functionName, { body });
       
       if (!error && data && !(data as { error?: string }).error) {
@@ -110,36 +121,38 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
 
       let msg = error?.message || (data as { error?: string })?.error || "Request failed";
       
-      // Attempt to extract more detailed error from context if available
-      const ctx = (error as any)?.context;
-      try {
-        if (ctx && typeof ctx.json === "function") {
-          const j = await ctx.json();
-          if (j?.error) msg = j.error;
-        }
-      } catch { /* ignore */ }
-
+      // If the function explicitly returned an error (like "Invalid API key")
       if (!isEdgeUnavailable(msg)) {
-        // Only log to console if it's not a common auth/access error
-        if (!msg.includes("accessToken") && !msg.includes("auth")) {
-          console.warn(`[PiA2U] ${functionName} action "${action}" failed:`, msg);
-        }
         throw new Error(msg);
       }
       
+      // If it's a network/not-found error, try the fetch fallback
       lastError = new Error(msg);
       return await invokeViaFetch<T>(functionName, body);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      
+      // If it's a fatal logic error from the backend, don't retry other functions
       if (!isEdgeUnavailable(msg)) {
-        throw err; // Fatal error, don't retry next function
+        throw err;
       }
+      
       lastError = err instanceof Error ? err : new Error(msg);
+      // Continue to next function name if available
     }
   }
 
+  // If we reach here, all attempts failed
   const finalMsg = lastError?.message || "All connection attempts failed";
-  throw new Error(`${finalMsg}. Run: npx supabase functions deploy pi-a2u --project-ref jzzbmoopwnvgxxirulga`);
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "unknown";
+  
+  if (isEdgeUnavailable(finalMsg)) {
+    throw new Error(
+      `Connection failed (${finalMsg}). Project: ${projectId}. Please check your internet or deploy the backend: npx supabase functions deploy pi-a2u --project-ref ${projectId}`
+    );
+  }
+  
+  throw new Error(finalMsg);
 }
 
 async function fetchWalletProgressFromDb(): Promise<WalletProgress> {
