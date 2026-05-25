@@ -1,0 +1,748 @@
+# Pi Network Testnet A2U (App-to-User) — Full Implementation Prompt
+
+Use this document to replicate a **production-ready Pi Testnet A2U reward system** in any React + Vite + Supabase (or Deno-deployed backend) app.
+
+---
+
+## 1. Goal
+
+Send App-to-User (A2U) Test Pi payments to 10 unique Pioneer wallets so your Pi app qualifies for Mainnet wallet approval.
+
+**Reward flow:**
+1. Pioneer opens your app inside **Pi Browser**.
+2. Taps **"Claim Test Pi"**.
+3. Backend creates a Pi A2U payment → submits to blockchain → completes it.
+4. Backend records the unique receiving wallet address.
+5. Repeat with 10 different Pi accounts until goal reached.
+
+---
+
+## 2. Tech Stack
+
+| Layer | Tech |
+|-------|------|
+| Frontend | React 18, Vite, TypeScript, Tailwind CSS |
+| Backend | Supabase Edge Function (Deno) |
+| Pi SDK | `pi-backend` npm package inside Edge Function |
+| Browser | Pi Browser (mandatory for auth + A2U) |
+
+---
+
+## 3. Environment Variables
+
+Set these in your **Supabase Edge Function secrets** and **frontend `.env`**:
+
+```bash
+# Supabase Edge Function secrets
+PI_A2U_API_KEY=your_pi_developer_portal_app_key
+PI_WALLET_PRIVATE_SEED=SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+PI_A2U_AMOUNT=2.00                        # amount per claim
+PI_A2U_MEMO="App Testnet reward"          # default memo
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Frontend (.env)
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_anon_key
+```
+
+> **CRITICAL:** `PI_WALLET_PRIVATE_SEED` must derive the **same wallet address** shown in your Pi Developer Portal → App → Wallet. If they mismatch, Pi rejects every A2U payment with `PI_WALLET_PRIVATE_SEED does not match`.
+
+---
+
+## 4. Database Schema
+
+Run this SQL migration in Supabase:
+
+```sql
+CREATE TABLE IF NOT EXISTS public.pi_a2u_transactions (
+  id SERIAL PRIMARY KEY,
+  uid TEXT NOT NULL,
+  username TEXT,
+  payment_id TEXT NOT NULL,
+  amount NUMERIC NOT NULL DEFAULT 0.01,
+  memo TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  txid TEXT,
+  wallet_address TEXT,
+  error TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.pi_a2u_wallets (
+  id SERIAL PRIMARY KEY,
+  uid TEXT NOT NULL,
+  username TEXT,
+  wallet_address TEXT NOT NULL,
+  payment_id TEXT,
+  txid TEXT,
+  amount NUMERIC,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pi_a2u_wallets_address
+  ON public.pi_a2u_wallets(wallet_address);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pi_a2u_tx_success_uid
+  ON public.pi_a2u_transactions(uid)
+  WHERE status = 'success';
+
+-- Public read policies (progress display)
+CREATE POLICY "Anyone can view A2U wallet progress"
+ON public.pi_a2u_wallets FOR SELECT USING (true);
+
+CREATE POLICY "Anyone can view A2U transaction history"
+ON public.pi_a2u_transactions FOR SELECT USING (true);
+
+ALTER TABLE public.pi_a2u_wallets
+  ADD COLUMN IF NOT EXISTS payment_id TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pi_a2u_wallets_payment_id
+  ON public.pi_a2u_wallets(payment_id)
+  WHERE payment_id IS NOT NULL;
+```
+
+---
+
+## 5. Backend: Supabase Edge Function (`pi-a2u`)
+
+Create `supabase/functions/pi-a2u/index.ts`:
+
+```ts
+/// <reference lib="deno.ns" />
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import PiNetwork from "npm:pi-backend@0.1.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const json = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+const TARGET_WALLETS = 10;
+const REWARD_AMOUNT = Number(Deno.env.get("PI_A2U_AMOUNT") || "0.01");
+const DEFAULT_MEMO = Deno.env.get("PI_A2U_MEMO") || "Testnet reward";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const PI_API_KEY = Deno.env.get("PI_A2U_API_KEY") || Deno.env.get("PI_API_KEY") || "";
+const PI_WALLET_SEED = Deno.env.get("PI_WALLET_PRIVATE_SEED") || "";
+
+const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+
+// ─── Types ───────────────────────────────────────────────────────────
+type PiPayment = {
+  identifier: string;
+  user_uid: string;
+  amount: number;
+  memo: string;
+  metadata?: Record<string, unknown>;
+  from_address?: string;
+  to_address?: string;
+  network?: string;
+  transaction?: { txid?: string; verified?: boolean } | null;
+  status?: {
+    developer_approved?: boolean;
+    transaction_verified?: boolean;
+    developer_completed?: boolean;
+    cancelled?: boolean;
+    user_cancelled?: boolean;
+  };
+};
+
+type PiClient = {
+  createPayment: (paymentData: Record<string, unknown>) => Promise<string>;
+  submitPayment: (paymentId: string) => Promise<string>;
+  completePayment: (paymentId: string, txid: string) => Promise<PiPayment>;
+  cancelPayment: (paymentId: string) => Promise<PiPayment>;
+  getPayment: (paymentId: string) => Promise<PiPayment>;
+  getIncompleteServerPayments: () => Promise<PiPayment[]>;
+  myKeypair?: { publicKey: () => string };
+};
+
+type PiSdkError = Error & {
+  code?: string;
+  payment?: PiPayment;
+  paymentId?: string;
+  txid?: string;
+  response?: { data?: Record<string, unknown>; status?: number };
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+function safeStringify(v: unknown) { try { return JSON.stringify(v); } catch { return String(v); } }
+
+function summarizePayment(p: PiPayment) {
+  return { payment_id: p.identifier, uid: p.user_uid, amount: p.amount, memo: p.memo, network: p.network, from_address: p.from_address || null, to_address: p.to_address || null, txid: p.transaction?.txid || null, status: p.status || null };
+}
+
+async function logDiagnostic(params: { uid?: string; username?: string; level?: "info"|"warn"|"error"; message: string; details?: Record<string, unknown>; amount?: number; memo?: string }) {
+  const level = params.level || "info";
+  const now = new Date().toISOString();
+  console[level === "error" ? "error" : level === "warn" ? "warn" : "log"](`[pi-a2u:${level}] ${params.message}`, params.details || {});
+  await supabase.from("pi_a2u_transactions").insert({
+    uid: params.uid || "system", username: params.username || null,
+    payment_id: `log:${Date.now()}:${crypto.randomUUID()}`,
+    amount: params.amount ?? REWARD_AMOUNT, memo: params.memo || DEFAULT_MEMO,
+    status: `log_${level}`,
+    error: safeStringify({ message: params.message, details: params.details, timestamp: now }).slice(0, 7000),
+    created_at: now, updated_at: now,
+  }).then(({ error }) => { if (error) console.error("Log persist failed", error.message); });
+}
+
+function makeLogger(uid?: string, username?: string, amount = REWARD_AMOUNT, memo = DEFAULT_MEMO) {
+  return (level: "info"|"warn"|"error", message: string, details?: Record<string, unknown>) =>
+    logDiagnostic({ uid, username, level, message, details, amount, memo });
+}
+
+function getPiClient(): PiClient {
+  if (!PI_API_KEY || !PI_WALLET_SEED) throw new Error("Missing PI_A2U_API_KEY or PI_WALLET_PRIVATE_SEED");
+  const PiCtor: new (k: string, s: string) => PiClient =
+    ((PiNetwork as unknown as { default?: new (k: string, s: string) => PiClient }).default ?? PiNetwork) as any;
+  return new PiCtor(PI_API_KEY, PI_WALLET_SEED);
+}
+
+function getConfiguredWalletAddress(pi: PiClient) { return pi.myKeypair?.publicKey?.() || ""; }
+
+function isOngoingPaymentError(err: unknown) {
+  const code = extractErrorCode(err);
+  const msg = extractErrorMessage(err).toLowerCase();
+  return code === "ongoing_payment_found" || msg.includes("ongoing payment") || msg.includes("ongoing_payment") || msg.includes("incomplete_server_payments");
+}
+
+function extractErrorCode(err: unknown) { return String((err as PiSdkError)?.code || (err as PiSdkError)?.response?.data?.error || ""); }
+function extractEmbeddedPayment(err: unknown): PiPayment | null { const e = err as PiSdkError; return e?.payment || (e?.response?.data?.payment as PiPayment) || null; }
+function extractLinkedTxid(err: unknown) { return String((err as PiSdkError)?.txid || (err as PiSdkError)?.response?.data?.txid || ""); }
+function extractErrorMessage(err: unknown) { const e = err as PiSdkError; const d = e?.response?.data; return String((d && (d.error_message || d.message || JSON.stringify(d))) || e?.message || "A2U payment failed"); }
+function extractErrorStatus(err: unknown) { return (err as { response?: { status?: number } })?.response?.status; }
+
+function isPaymentVerified(p: PiPayment) {
+  return p.status?.transaction_verified === true && p.status?.developer_completed === true && p.status?.cancelled !== true && p.status?.user_cancelled !== true;
+}
+
+// ─── Pi API ──────────────────────────────────────────────────────────
+async function verifyPiAccessToken(token: string) {
+  const r = await fetch("https://api.minepi.com/v2/me", { headers: { Authorization: `Bearer ${token}` } });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data?.uid) { const err = new Error(data?.error || "Pi auth failed"); (err as any).status = r.status || 401; throw err; }
+  return { uid: String(data.uid), username: typeof data.username === "string" ? data.username : "" };
+}
+
+async function getProgress() {
+  const { count } = await supabase.from("pi_a2u_wallets").select("*", { count: "exact", head: true });
+  const unique = count ?? 0;
+  return { unique_wallets: unique, target: TARGET_WALLETS, progress_label: `${unique} / ${TARGET_WALLETS} unique wallets completed`, completed: unique >= TARGET_WALLETS };
+}
+
+async function hasSuccessfulReward(uid: string) {
+  const { data } = await supabase.from("pi_a2u_transactions").select("id, txid, wallet_address").eq("uid", uid).eq("status", "success").maybeSingle();
+  return Boolean(data);
+}
+
+async function saveTransaction(params: { uid: string; username?: string; paymentId: string; amount: number; memo: string; status: string; txid?: string | null; walletAddress?: string | null; error?: string | null }) {
+  const now = new Date().toISOString();
+  const { data: existing } = await supabase.from("pi_a2u_transactions").select("id").eq("payment_id", params.paymentId).maybeSingle();
+  const row = { uid: params.uid, username: params.username || null, payment_id: params.paymentId, amount: params.amount, memo: params.memo, status: params.status, txid: params.txid || null, wallet_address: params.walletAddress || null, error: params.error || null, updated_at: now };
+  if (existing) await supabase.from("pi_a2u_transactions").update(row).eq("id", existing.id);
+  else await supabase.from("pi_a2u_transactions").insert({ ...row, created_at: now });
+}
+
+async function recordSuccess(payment: PiPayment, username = "") {
+  const paymentId = payment.identifier; const uid = payment.user_uid; const txid = payment.transaction?.txid || ""; const walletAddress = payment.to_address || "";
+  await saveTransaction({ uid, username, paymentId, amount: Number(payment.amount || REWARD_AMOUNT), memo: payment.memo || DEFAULT_MEMO, status: "success", txid, walletAddress });
+  let walletAdded = false;
+  if (walletAddress && txid) {
+    const { error } = await supabase.from("pi_a2u_wallets").insert({ uid, username, wallet_address: walletAddress, payment_id: paymentId, txid, amount: Number(payment.amount || REWARD_AMOUNT) });
+    walletAdded = !error;
+  }
+  return { walletAdded };
+}
+
+// ─── Payment Resolution ──────────────────────────────────────────────
+async function resolvePayment(pi: PiClient, payment: PiPayment, username = "", options: { ignoreSeedMismatchWithoutTx?: boolean } = {}, logStep?: ReturnType<typeof makeLogger>) {
+  const paymentId = payment.identifier; const uid = payment.user_uid; const amount = Number(payment.amount || REWARD_AMOUNT); const memo = payment.memo || DEFAULT_MEMO;
+  const configuredWallet = getConfiguredWalletAddress(pi);
+  await logStep?.("info", "Resolving Pi server payment", { payment: summarizePayment(payment), configured_wallet: configuredWallet || null });
+
+  if (payment.status?.cancelled || payment.status?.user_cancelled) {
+    await saveTransaction({ uid, username, paymentId, amount, memo, status: "failed", error: "Pi payment was cancelled before completion" });
+    return { completed: false, cancelled: true };
+  }
+
+  if (payment.from_address && configuredWallet && payment.from_address !== configuredWallet) {
+    const message = `PI_WALLET_PRIVATE_SEED does not match the Pi app wallet for this payment. App wallet: ${payment.from_address}; configured seed wallet: ${configuredWallet}`;
+    if (!payment.transaction?.txid) { await logStep?.("warn", "Cancelling payment: seed mismatch", { payment_id: paymentId, app_wallet: payment.from_address, configured_wallet: configuredWallet }); await pi.cancelPayment(paymentId).catch(() => null); }
+    await saveTransaction({ uid, username, paymentId, amount, memo, status: "failed", error: message });
+    if (options.ignoreSeedMismatchWithoutTx && !payment.transaction?.txid) return { completed: false, cancelled: true };
+    throw new Error(message);
+  }
+
+  let txid = payment.transaction?.txid || "";
+  await saveTransaction({ uid, username, paymentId, amount, memo, status: txid ? "submitted" : "pending", txid });
+
+  if (isPaymentVerified(payment)) { const { walletAdded } = await recordSuccess(payment, username); return { completed: true, payment, txid, walletAdded }; }
+
+  if (!txid) {
+    await logStep?.("info", "Submitting Pi blockchain transaction", { payment_id: paymentId });
+    try { txid = await pi.submitPayment(paymentId); } catch (error) {
+      const linkedTxid = extractLinkedTxid(error);
+      if (extractErrorCode(error) === "payment_already_has_linked_txid" && linkedTxid) { txid = linkedTxid; await logStep?.("warn", "Payment already had linked txid; completing existing", { payment_id: paymentId, txid }); }
+      else throw error;
+    }
+    await saveTransaction({ uid, username, paymentId, amount, memo, status: "submitted", txid });
+  }
+
+  await logStep?.("info", "Completing Pi payment with txid", { payment_id: paymentId, txid });
+  const completedPayment = await pi.completePayment(paymentId, txid);
+  if (!isPaymentVerified(completedPayment)) { await saveTransaction({ uid, username, paymentId, amount, memo, status: "failed", txid, walletAddress: completedPayment.to_address || payment.to_address || null, error: "Payment completed but Pi verification flags are not satisfied" }); throw new Error("Payment completed but Pi verification flags are not satisfied"); }
+
+  const { walletAdded } = await recordSuccess(completedPayment, username);
+  await logStep?.("info", "Pi A2U payment completed successfully", { payment_id: paymentId, txid, wallet_address: completedPayment.to_address || null, wallet_added: walletAdded });
+  return { completed: true, payment: completedPayment, txid, walletAdded };
+}
+
+async function resolveIncompletePayments(pi: PiClient, currentUid?: string, username = "", logStep?: ReturnType<typeof makeLogger>) {
+  const incomplete = await pi.getIncompleteServerPayments().catch(async (error) => { await logStep?.("error", "Unable to read incomplete server payments", { code: extractErrorCode(error), error: extractErrorMessage(error) }); return []; });
+  await logStep?.("info", "Checked incomplete server payments", { count: Array.isArray(incomplete) ? incomplete.length : 0, payments: Array.isArray(incomplete) ? incomplete.map(summarizePayment) : [] });
+  if (!Array.isArray(incomplete) || incomplete.length === 0) return [];
+  const ordered = [...incomplete].sort((a, b) => { if (a.user_uid === currentUid && b.user_uid !== currentUid) return -1; if (a.user_uid !== currentUid && b.user_uid === currentUid) return 1; return 0; });
+  const results = [];
+  for (const payment of ordered) {
+    try { results.push(await resolvePayment(pi, payment, payment.user_uid === currentUid ? username : "", { ignoreSeedMismatchWithoutTx: true }, logStep)); }
+    catch (error) { if (extractErrorMessage(error).includes("PI_WALLET_PRIVATE_SEED does not match")) throw error; await logStep?.("error", "Incomplete payment recovery failed", { payment_id: payment.identifier, uid: payment.user_uid, error: extractErrorMessage(error) }); }
+  }
+  return results;
+}
+
+async function createPaymentWithRecovery(pi: PiClient, paymentData: Record<string, unknown>, username: string, logStep: ReturnType<typeof makeLogger>) {
+  try {
+    await logStep("info", "Creating Pi A2U payment", { payment_data: paymentData });
+    return await pi.createPayment(paymentData);
+  } catch (error) {
+    if (!isOngoingPaymentError(error)) throw error;
+    const embeddedPayment = extractEmbeddedPayment(error);
+    await logStep("warn", "Pi reports ongoing payment; starting recovery", { code: extractErrorCode(error), error: extractErrorMessage(error), status: extractErrorStatus(error), embedded_payment: embeddedPayment ? summarizePayment(embeddedPayment) : null });
+    const recoveryResults = [];
+    if (embeddedPayment?.identifier) {
+      try {
+        await logStep("info", "Recovering ongoing payment from createPayment error", { payment: summarizePayment(embeddedPayment) });
+        recoveryResults.push(await resolvePayment(pi, embeddedPayment, embeddedPayment.user_uid === String(paymentData.uid || "") ? username : "", { ignoreSeedMismatchWithoutTx: true }, logStep));
+      } catch (recoveryError) { await logStep("error", "Embedded ongoing payment recovery failed", { payment_id: embeddedPayment.identifier, error: extractErrorMessage(recoveryError) }); throw recoveryError; }
+    }
+    recoveryResults.push(...(await resolveIncompletePayments(pi, String(paymentData.uid || ""), username, logStep)));
+    await logStep("info", "Finished ongoing payment recovery attempt", { recovery_results: recoveryResults });
+    const recoveredForCurrentUser = recoveryResults.find(r => r?.completed === true && (r?.payment as PiPayment)?.user_uid === String(paymentData.uid || "") && (r?.payment as PiPayment)?.identifier);
+    if (recoveredForCurrentUser?.payment) {
+      const rp = recoveredForCurrentUser.payment as PiPayment;
+      await logStep("info", "Returning recovered payment instead of creating duplicate", { payment_id: rp.identifier, txid: rp.transaction?.txid || null });
+      return rp.identifier;
+    }
+    if (await hasSuccessfulReward(String(paymentData.uid || ""))) throw new Error("You have already claimed this testnet reward.");
+    try {
+      await logStep("info", "Retrying Pi A2U payment creation after recovery", { payment_data: paymentData });
+      return await pi.createPayment(paymentData);
+    } catch (retryError) {
+      if (isOngoingPaymentError(retryError)) throw new Error("Pi still reports an ongoing payment after recovery. Open the Pi Wallet/Payments screen in Pi Browser and cancel or finish the pending payment, then retry.");
+      throw retryError;
+    }
+  }
+}
+
+// ─── Handlers ────────────────────────────────────────────────────────
+async function handleClaim(uid: string, username: string, amount: number, memo: string) {
+  const logStep = makeLogger(uid, username, amount, memo);
+  await logStep("info", "Claim request received", { uid, username, amount, memo, secrets_present: { pi_api_key: Boolean(PI_API_KEY), pi_wallet_private_seed: Boolean(PI_WALLET_SEED) } });
+
+  if (await hasSuccessfulReward(uid)) { await logStep("warn", "Claim blocked: already rewarded"); return json({ error: "You have already claimed this testnet reward." }, 409); }
+
+  const progress = await getProgress();
+  if (progress.completed) { await logStep("warn", "Claim blocked: target complete", { progress }); return json({ error: "Testnet goal reached: 10 unique wallets completed.", progress }, 409); }
+
+  const pi = getPiClient();
+  await logStep("info", "Pi backend client initialized", { configured_wallet: getConfiguredWalletAddress(pi) || null });
+  const paymentData = { amount, memo: memo || DEFAULT_MEMO, metadata: { source: "testnet-a2u", uid, username, created_at: new Date().toISOString() }, uid };
+
+  let paymentId = "", txid = "";
+  try {
+    paymentId = await createPaymentWithRecovery(pi, paymentData, username, logStep);
+    await logStep("info", "Pi payment created", { payment_id: paymentId });
+    const payment = await pi.getPayment(paymentId);
+    const result = await resolvePayment(pi, payment, username, {}, logStep);
+    const completedPayment = result.payment!;
+    txid = result.txid || completedPayment.transaction?.txid || "";
+    const newProgress = await getProgress();
+    return json({ success: true, data: { payment_id: paymentId, txid, wallet_address: completedPayment.to_address || "", amount, memo: paymentData.memo, wallet_added: result.walletAdded, progress: newProgress } });
+  } catch (error: unknown) {
+    const apiStatus = extractErrorStatus(error); const message = extractErrorMessage(error);
+    await logStep("error", "A2U claim failed", { status: apiStatus || null, message, payment_id: paymentId || null });
+    if (paymentId) await saveTransaction({ uid, username, paymentId, amount, memo: paymentData.memo, status: "failed", txid: txid || null, error: message });
+    const status = message.includes("already claimed") ? 409 : message.includes("PI_WALLET_PRIVATE_SEED does not match") ? 500 : apiStatus || 500;
+    return json({ error: message, payment_id: paymentId || undefined }, status);
+  }
+}
+
+async function getAdminDashboard() {
+  const progress = await getProgress();
+  const { data: txs } = await supabase.from("pi_a2u_transactions").select("*").order("created_at", { ascending: false }).limit(200);
+  const { data: wallets } = await supabase.from("pi_a2u_wallets").select("wallet_address, uid, username, txid, payment_id, created_at").order("created_at", { ascending: false });
+  const transactions = (txs || []).filter(t => !String(t.status || "").startsWith("log_"));
+  const logs = (txs || []).filter(t => String(t.status || "").startsWith("log_")).map(t => { let parsed: Record<string, unknown> = {}; try { parsed = JSON.parse(String(t.error || "{}")); } catch { parsed = { message: t.error || "Diagnostic event" }; } return { timestamp: t.created_at, level: String(t.status || "log_info").replace("log_", ""), message: String(parsed.message || "Diagnostic event"), details: parsed.details || {}, uid: t.uid, username: t.username }; });
+  const success = transactions.filter(t => t.status === "success");
+  const failed = transactions.filter(t => t.status === "failed");
+  return { progress: { ...progress, wallets: wallets || [] }, total_successful_a2u: success.length, unique_wallets_count: (wallets || []).length, wallet_addresses: (wallets || []).map(w => w.wallet_address), transactions, successful_transactions: success, failed_transactions: failed, logs };
+}
+
+// ─── Router ──────────────────────────────────────────────────────────
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const action = String(body?.action || "");
+
+    if (action === "auth_verify") {
+      const token = String(body?.accessToken || ""); if (!token) return json({ error: "Missing accessToken" }, 400);
+      const user = await verifyPiAccessToken(token); return json({ success: true, data: user });
+    }
+    if (action === "progress") { const progress = await getProgress(); return json({ success: true, data: progress }); }
+    if (action === "admin_dashboard") { const data = await getAdminDashboard(); return json({ success: true, data }); }
+    if (action === "claim") {
+      const token = String(body?.accessToken || ""); if (!token) return json({ error: "Missing accessToken" }, 401);
+      const user = await verifyPiAccessToken(token);
+      const amount = Number(body?.amount ?? REWARD_AMOUNT);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 1) return json({ error: "Invalid amount" }, 400);
+      const memo = String(body?.memo || DEFAULT_MEMO);
+      return await handleClaim(user.uid, user.username, amount, memo);
+    }
+    return json({ error: "Invalid action" }, 400);
+  } catch (error: unknown) {
+    const status = (error as { status?: number })?.status ?? 500;
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    return json({ error: message }, status);
+  }
+});
+```
+
+---
+
+## 6. Frontend: Pi SDK Helpers (`src/lib/piSdk.ts`)
+
+```ts
+const PI_AUTH_STORAGE_KEY = "myapp_pi_auth";
+
+export type PiAuthSession = { uid: string; username: string; accessToken: string };
+
+export function isPiSandbox(): boolean {
+  const env = String(import.meta.env.VITE_PI_SANDBOX ?? "").trim().toLowerCase();
+  if (env.length > 0) return env === "true";
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  if (host.includes("testnet") || path.includes("testnet")) return true;
+  if (import.meta.env.PROD) return false;
+  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".local") || host.endsWith(".test");
+}
+
+export function isPiBrowser(): boolean {
+  if (typeof window === "undefined") return false;
+  return /PiBrowser/i.test(navigator.userAgent) || Boolean(window.Pi);
+}
+
+export function initPiSdk(): boolean {
+  if (!window.Pi) return false;
+  try { window.Pi.init({ version: "2.0", sandbox: isPiSandbox() }); return true; } catch (e) { console.warn("Pi SDK init failed", e); return false; }
+}
+
+export function loadPiAuthSession(): PiAuthSession | null {
+  try { const raw = localStorage.getItem(PI_AUTH_STORAGE_KEY); if (!raw) return null; const parsed = JSON.parse(raw) as PiAuthSession; if (!parsed?.uid || !parsed?.accessToken) return null; return parsed; } catch { return null; }
+}
+export function savePiAuthSession(session: PiAuthSession): void { localStorage.setItem(PI_AUTH_STORAGE_KEY, JSON.stringify(session)); }
+export function clearPiAuthSession(): void { localStorage.removeItem(PI_AUTH_STORAGE_KEY); }
+
+export async function waitForPiSdk(timeoutMs = 12000): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (window.Pi) return true;
+  return new Promise((resolve) => {
+    const onReady = () => resolve(Boolean(window.Pi));
+    const onError = () => resolve(false);
+    window.addEventListener("pi-sdk-ready", onReady, { once: true });
+    window.addEventListener("pi-sdk-error", onError, { once: true });
+    const timer = window.setTimeout(() => resolve(Boolean(window.Pi)), timeoutMs);
+    const wrappedReady = () => { window.clearTimeout(timer); onReady(); };
+    window.removeEventListener("pi-sdk-ready", onReady);
+    window.addEventListener("pi-sdk-ready", wrappedReady, { once: true });
+  });
+}
+
+export async function authenticatePi(scopes: string[] = ["username"]): Promise<PiAuthSession> {
+  if (!window.Pi) throw new Error("Pi SDK unavailable. Open this app in Pi Browser.");
+  initPiSdk();
+  const auth = await window.Pi.authenticate(scopes);
+  const session: PiAuthSession = { uid: auth.user.uid, username: auth.user.username || "", accessToken: auth.accessToken };
+  savePiAuthSession(session);
+  return session;
+}
+```
+
+---
+
+## 7. Frontend: API Helpers (`src/lib/piApi.ts`)
+
+```ts
+import { supabase } from "@/integrations/supabase/client"; // or your Supabase client
+import type { PiAuthSession } from "@/lib/piSdk";
+
+async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("pi-a2u", { body });
+  if (error) {
+    const ctx: any = (error as any).context;
+    let msg = error.message || "Request failed";
+    try { if (ctx && typeof ctx.json === "function") { const j = await ctx.json(); if (j?.error) msg = j.error; } } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  return data as T;
+}
+
+export async function verifyPiAuth(accessToken: string) {
+  return invokePiA2U<{ success: boolean; data: { uid: string; username: string } }>({ action: "auth_verify", accessToken });
+}
+
+export type WalletProgress = { unique_wallets: number; target: number; progress_label: string; completed: boolean; total_successful_a2u?: number };
+
+export async function fetchWalletProgress(): Promise<WalletProgress> {
+  const result = await invokePiA2U<{ success: boolean; data: WalletProgress }>({ action: "progress" });
+  return result.data;
+}
+
+export async function claimTestnetPi(session: PiAuthSession, body?: { amount?: number; memo?: string }) {
+  return invokePiA2U<{ success: boolean; data: { payment_id: string; txid: string; wallet_address: string; amount: number; memo: string; progress: WalletProgress; wallet_added: boolean } }>({
+    action: "claim", accessToken: session.accessToken, amount: body?.amount ?? 0.01, memo: body?.memo ?? "Testnet reward",
+  });
+}
+
+export async function fetchAdminDashboard() {
+  return invokePiA2U<{ success: boolean; data: any }>({ action: "admin_dashboard" });
+}
+```
+
+---
+
+## 8. Frontend: Auth Context (`src/contexts/PiAuthContext.tsx`)
+
+```tsx
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { authenticatePi, clearPiAuthSession, initPiSdk, isPiBrowser, loadPiAuthSession, savePiAuthSession, waitForPiSdk, type PiAuthSession } from "@/lib/piSdk";
+import { verifyPiAuth } from "@/lib/piApi";
+
+type PiAuthContextValue = { session: PiAuthSession | null; sdkReady: boolean; inPiBrowser: boolean; loading: boolean; authError: string | null; signIn: () => Promise<PiAuthSession>; signOut: () => void; refreshSession: () => Promise<void>; };
+const PiAuthContext = createContext<PiAuthContextValue | null>(null);
+
+export function PiAuthProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<PiAuthSession | null>(() => loadPiAuthSession());
+  const [sdkReady, setSdkReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const autoLoginAttempted = useRef(false);
+  const inPiBrowser = isPiBrowser();
+
+  const refreshSession = useCallback(async () => {
+    const stored = loadPiAuthSession(); if (!stored?.accessToken) { setSession(null); return; }
+    try { const verified = await verifyPiAuth(stored.accessToken); const next: PiAuthSession = { uid: verified.data.uid, username: verified.data.username || stored.username, accessToken: stored.accessToken }; savePiAuthSession(next); setSession(next); setAuthError(null); }
+    catch { clearPiAuthSession(); setSession(null); setAuthError("Session expired"); }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const boot = async () => {
+      const ready = await waitForPiSdk(); if (cancelled) return; setSdkReady(ready); if (ready) initPiSdk();
+      const stored = loadPiAuthSession();
+      if (stored && inPiBrowser && ready) { try { await refreshSession(); } catch { /* handled */ } }
+      else if (stored && !inPiBrowser) { setSession(stored); }
+      if (!cancelled) setLoading(false);
+    };
+    void boot();
+    const onReady = () => { setSdkReady(Boolean(window.Pi)); initPiSdk(); };
+    window.addEventListener("pi-sdk-ready", onReady);
+    return () => { cancelled = true; window.removeEventListener("pi-sdk-ready", onReady); };
+  }, [inPiBrowser, refreshSession]);
+
+  const signIn = useCallback(async () => {
+    setAuthError(null); setLoading(true);
+    try {
+      const auth = await authenticatePi(["username", "payments", "wallet_address"]);
+      const verified = await verifyPiAuth(auth.accessToken);
+      const next: PiAuthSession = { uid: verified.data.uid, username: verified.data.username || auth.username, accessToken: auth.accessToken };
+      savePiAuthSession(next); setSession(next); return next;
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (loading || session || !inPiBrowser || !sdkReady || autoLoginAttempted.current) return;
+    autoLoginAttempted.current = true;
+    void signIn().catch(e => setAuthError(e instanceof Error ? e.message : "Auto login failed"));
+  }, [loading, session, inPiBrowser, sdkReady, signIn]);
+
+  const signOut = useCallback(() => { clearPiAuthSession(); setSession(null); setAuthError(null); autoLoginAttempted.current = false; }, []);
+  const value = useMemo(() => ({ session, sdkReady, inPiBrowser, loading, authError, signIn, signOut, refreshSession }), [session, sdkReady, inPiBrowser, loading, authError, signIn, signOut, refreshSession]);
+  return <PiAuthContext.Provider value={value}>{children}</PiAuthContext.Provider>;
+}
+
+export function usePiAuth() { const ctx = useContext(PiAuthContext); if (!ctx) throw new Error("usePiAuth must be inside PiAuthProvider"); return ctx; }
+```
+
+---
+
+## 9. Frontend: Claim Button (`src/components/pi/ClaimTestPiButton.tsx`)
+
+```tsx
+import { useState } from "react";
+import { Loader2, Gift } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { usePiAuth } from "@/contexts/PiAuthContext";
+import { claimTestnetPi, fetchWalletProgress, type WalletProgress } from "@/lib/piApi";
+
+type Props = { onSuccess?: (data: { txid: string; progress: WalletProgress }) => void; className?: string };
+
+export default function ClaimTestPiButton({ onSuccess, className }: Props) {
+  const { session, signIn, inPiBrowser, sdkReady, loading: authLoading } = usePiAuth();
+  const [claiming, setClaiming] = useState(false);
+  const [lastTxid, setLastTxid] = useState<string | null>(null);
+  const [progress, setProgress] = useState<WalletProgress | null>(null);
+
+  const handleClaim = async () => {
+    if (!inPiBrowser) { toast.error("Open this page in Pi Browser to claim."); return; }
+    if (!sdkReady) { toast.error("Pi SDK not ready. Please wait or reload."); return; }
+    setClaiming(true);
+    try {
+      let activeSession = session;
+      if (!activeSession) activeSession = await signIn();
+      const result = await claimTestnetPi(activeSession, { amount: 0.01, memo: "Testnet reward" });
+      setLastTxid(result.data.txid);
+      setProgress(result.data.progress);
+      toast.success(`Sent ${result.data.amount} Test Pi! TX: ${result.data.txid.slice(0, 12)}…`);
+      onSuccess?.({ txid: result.data.txid, progress: result.data.progress });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Claim failed";
+      if (msg.includes("already claimed")) toast.error("You have already claimed this reward.");
+      else if (msg.includes("unique wallets")) toast.message("Testnet goal reached: 10 unique wallets completed.");
+      else toast.error(msg);
+      try { const p = await fetchWalletProgress(); setProgress(p); } catch { /* ignore */ }
+    } finally { setClaiming(false); }
+  };
+
+  return (
+    <div className={className}>
+      <Button type="button" onClick={() => void handleClaim()} disabled={claiming || authLoading || (inPiBrowser && !sdkReady)} className="h-11 w-full rounded-2xl bg-blue-600 text-white hover:bg-blue-700">
+        {claiming ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending Test Pi…</> : <><Gift className="mr-2 h-4 w-4" /> Claim Test Pi</>}
+      </Button>
+      {progress && <p className="mt-2 text-center text-sm text-muted-foreground">{progress.progress_label}</p>}
+      {lastTxid && <p className="mt-1 break-all text-center text-xs text-emerald-600">Success — txid: {lastTxid}</p>}
+    </div>
+  );
+}
+```
+
+---
+
+## 10. Frontend: Reward Page (`src/pages/TestnetRewardPage.tsx`)
+
+Build a page at `/testnet-reward` that:
+1. Wraps content with `<PiAuthProvider>` (ideally at app root).
+2. Imports `ClaimTestPiButton`.
+3. Calls `fetchWalletProgress()` on mount to show `N / 10 unique wallets completed`.
+4. Shows a warning if `!inPiBrowser`.
+5. Includes a link to `/admin/testnet-progress` (or your admin route).
+
+Use the `PiAuthContext` values (`session`, `signIn`, `sdkReady`, `inPiBrowser`) to conditionally show the Sign-In button or the Claim button.
+
+---
+
+## 11. Frontend: Admin Dashboard (`src/pages/admin/TestnetProgressPage.tsx`)
+
+Build a simple admin page that calls `fetchAdminDashboard()` every 15s and displays:
+- Unique wallets count / 10 target
+- Successful A2U count
+- List of wallet addresses
+- Transaction table (status, txid, wallet)
+- Recent diagnostic logs (from `pi_a2u_transactions` rows with `log_*` status)
+
+Use the `TestnetProgressPage.tsx` in the codebase as reference for the exact table/log layout.
+
+---
+
+## 12. Setup Checklist
+
+1. **Pi Developer Portal**
+   - Create an app → get `API Key`
+   - Go to App → Wallet → note the **wallet address** (starts with `G`)
+   - Copy the **Private Seed** (starts with `S`, 56 chars)
+
+2. **Supabase**
+   - Run the SQL migration (Section 4)
+   - Add secrets: `PI_A2U_API_KEY`, `PI_WALLET_PRIVATE_SEED`, `PI_A2U_AMOUNT`, `PI_A2U_MEMO`
+   - Deploy edge function: `supabase functions deploy pi-a2u`
+
+3. **Frontend**
+   - Copy `piSdk.ts`, `piApi.ts`, `PiAuthContext.tsx`, `ClaimTestPiButton.tsx`
+   - Add `PiAuthProvider` to your app root (`main.tsx` or `App.tsx`)
+   - Create `/testnet-reward` route
+
+4. **Verify**
+   - Open app in Pi Browser → tap Claim Test Pi
+   - Check Edge Function logs for `Pi A2U payment completed successfully`
+   - Check Admin page for wallet address + txid
+
+---
+
+## 13. Critical Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `PI_WALLET_PRIVATE_SEED does not match` | Your seed derives a different wallet than the Pi Developer Portal app wallet | Update the secret to the correct seed for the Portal wallet, OR change the Portal wallet to match your current seed |
+| `ongoing_payment_found` / recovery loop | Previous claim was interrupted | The code auto-recovers. If it keeps failing, open Pi Browser → Wallet → cancel the pending OpenPay payment, then retry |
+| `payment_already_has_linked_txid` | Duplicate submit attempt | The code extracts the existing txid and completes it automatically |
+| `already claimed` (409) | This Pi UID already has a `success` row in `pi_a2u_transactions` | Use a different Pi account to claim |
+| No `txid` after submit | Pi network delay or testnet congestion | Wait 30s and check `pi.getPayment(paymentId)`; retry if needed |
+
+---
+
+## 14. cURL Reference
+
+```bash
+# Auth verify
+curl -s -X POST https://<project>.supabase.co/functions/v1/pi-a2u \
+  -H "Authorization: Bearer <anon-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"auth_verify","accessToken":"YOUR_PI_ACCESS_TOKEN"}' | jq
+
+# Progress
+curl -s -X POST https://<project>.supabase.co/functions/v1/pi-a2u \
+  -H "Authorization: Bearer <anon-key>" \
+  -d '{"action":"progress"}' | jq
+
+# Claim
+curl -s -X POST https://<project>.supabase.co/functions/v1/pi-a2u \
+  -H "Authorization: Bearer <anon-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"claim","accessToken":"YOUR_PI_ACCESS_TOKEN","amount":2.00,"memo":"Testnet reward"}' | jq
+
+# Admin dashboard
+curl -s -X POST https://<project>.supabase.co/functions/v1/pi-a2u \
+  -H "Authorization: Bearer <anon-key>" \
+  -d '{"action":"admin_dashboard"}' | jq
+```
+
+---
+
+## 15. References
+
+- [Pi SDK Docs](https://pi-apps.github.io/pi-sdk-docs/)
+- [Pi SDK — Advanced Payments](https://pi-apps.github.io/pi-sdk-docs/platform/PaymentsAdvanced)
+- [pi-nodejs SDK](https://github.com/pi-apps/pi-nodejs)
