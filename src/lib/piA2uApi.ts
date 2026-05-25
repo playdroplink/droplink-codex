@@ -110,47 +110,44 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
   let lastError: Error | null = null;
   const action = body.action || "unknown";
 
+  // Strategy: In Pi Browser, standard supabase.functions.invoke often fails due to restricted headers.
+  // We prioritize a clean fetch() call which is more compatible with WebKit/Pi Browser security.
   for (const functionName of FUNCTION_NAMES) {
     try {
-      // First try standard supabase-js invocation
-      const { data, error } = await supabase.functions.invoke(functionName, { body });
-      
-      if (!error && data && !(data as { error?: string }).error) {
-        return data as T;
-      }
-
-      let msg = error?.message || (data as { error?: string })?.error || "Request failed";
-      
-      // If the function explicitly returned an error (like "Invalid API key")
-      if (!isEdgeUnavailable(msg)) {
-        throw new Error(msg);
-      }
-      
-      // If it's a network/not-found error, try the fetch fallback
-      console.warn(`[PiA2U] ${functionName} invocation failed, trying fetch fallback... Error:`, error || msg);
-      lastError = new Error(msg);
       return await invokeViaFetch<T>(functionName, body);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[PiA2U] Attempt for ${functionName} failed:`, err);
+    } catch (fetchErr) {
+      const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
       
-      // If it's a fatal logic error from the backend, don't retry other functions
+      // If it's a fatal logic error (e.g. already claimed), don't retry
       if (!isEdgeUnavailable(msg)) {
-        throw err;
+        throw fetchErr;
       }
       
-      lastError = err instanceof Error ? err : new Error(msg);
-      // Continue to next function name if available
+      lastError = fetchErr instanceof Error ? fetchErr : new Error(msg);
+      
+      // Fallback to standard invoke if fetch fails for some reason
+      try {
+        const { data, error } = await supabase.functions.invoke(functionName, { body });
+        if (!error && data && !(data as { error?: string }).error) {
+          return data as T;
+        }
+        const invokeMsg = error?.message || (data as { error?: string })?.error || "Request failed";
+        if (!isEdgeUnavailable(invokeMsg)) {
+          throw new Error(invokeMsg);
+        }
+      } catch (invokeErr) {
+        // Continue to next function name
+      }
     }
   }
 
   // If we reach here, all attempts failed
   const finalMsg = lastError?.message || "All connection attempts failed";
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "unknown";
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "jzzbmoopwnvgxxirulga";
   
   if (isEdgeUnavailable(finalMsg)) {
     throw new Error(
-      `Connection failed (${finalMsg}). Project: ${projectId}. Please check your internet or deploy the backend: npx supabase functions deploy pi-a2u --project-ref ${projectId}`
+      `Connection failed (${finalMsg}). Project: ${projectId}. Please check your internet or redeploy: npx supabase functions deploy pi-a2u --project-ref ${projectId}`
     );
   }
   
