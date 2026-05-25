@@ -72,6 +72,7 @@ VITE_PI_A2U_MEMO=App Testnet reward
 | Error | Fix |
 |-------|-----|
 | `PI_WALLET_PRIVATE_SEED does not match` | Use the seed for the portal wallet `G` address |
+| `Invalid/missing API key` | Use a **Testnet API Key** from portal; redeploy function with `.\deploy-pi-a2u.ps1` |
 | `Invalid API key` (Supabase) | Match `VITE_SUPABASE_ANON_KEY` to project `jzzbmoopwnvgxxirulga` |
 | `ongoing_payment_found` | Cancel pending payment in Pi Wallet, retry |
 | `already claimed` | That Pi UID already has a success row — use another account |
