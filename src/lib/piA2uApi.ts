@@ -156,7 +156,7 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
 
 async function fetchWalletProgressFromDb(): Promise<WalletProgress> {
   const { count, error } = await supabase
-    .from("pi_a2u_wallets")
+    .from("pi_a2u_wallets" as any)
     .select("*", { count: "exact", head: true });
 
   if (error) {
@@ -181,7 +181,7 @@ async function fetchAdminDashboardFromDb(): Promise<A2uAdminDashboard> {
   const progress = await fetchWalletProgressFromDb();
 
   const { data: txs, error: txError } = await supabase
-    .from("pi_a2u_transactions")
+    .from("pi_a2u_transactions" as any)
     .select("*")
     .order("created_at", { ascending: false })
     .limit(200);
@@ -189,14 +189,14 @@ async function fetchAdminDashboardFromDb(): Promise<A2uAdminDashboard> {
   if (txError) throw new Error(txError.message);
 
   const { data: wallets, error: walletError } = await supabase
-    .from("pi_a2u_wallets")
+    .from("pi_a2u_wallets" as any)
     .select("wallet_address, uid, username, txid, payment_id, created_at")
     .order("created_at", { ascending: false });
 
   if (walletError) throw new Error(walletError.message);
 
-  const transactions = (txs || []).filter((t) => !String(t.status || "").startsWith("log_"));
-  const logs = (txs || [])
+  const transactions = ((txs || []) as any[]).filter((t) => !String(t.status || "").startsWith("log_"));
+  const logs = ((txs || []) as any[])
     .filter((t) => String(t.status || "").startsWith("log_"))
     .map((t) => {
       let parsed: Record<string, unknown> = {};
@@ -219,10 +219,10 @@ async function fetchAdminDashboardFromDb(): Promise<A2uAdminDashboard> {
   const failed = transactions.filter((t) => t.status === "failed");
 
   return {
-    progress: { ...progress, wallets: wallets || [] },
+    progress: { ...progress, wallets: (wallets || []) as any[] },
     total_successful_a2u: success.length,
     unique_wallets_count: (wallets || []).length,
-    wallet_addresses: (wallets || []).map((w) => String(w.wallet_address)),
+    wallet_addresses: ((wallets || []) as any[]).map((w) => String(w.wallet_address)),
     transactions,
     successful_transactions: success,
     failed_transactions: failed,
