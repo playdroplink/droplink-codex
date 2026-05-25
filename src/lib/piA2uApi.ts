@@ -45,7 +45,10 @@ function isEdgeUnavailable(message: string): boolean {
     m.includes("failed to send a request to the edge function") ||
     m.includes("function not found") ||
     m.includes("404") ||
-    m.includes("not found")
+    m.includes("not found") ||
+    m.includes("failed to fetch") ||
+    m.includes("load failed") ||
+    m.includes("network error")
   );
 }
 
@@ -53,17 +56,26 @@ async function invokeViaFetch<T>(
   functionName: string,
   body: Record<string, unknown>,
 ): Promise<T> {
-  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!baseUrl || !anonKey) {
+  const externalApiUrl = import.meta.env.VITE_PI_API_URL;
+
+  // Use VITE_PI_API_URL if it's set to a local/external endpoint (not Supabase)
+  const isExternalApi = externalApiUrl && !externalApiUrl.includes("supabase.co");
+  const baseUrl = isExternalApi ? externalApiUrl : `${supabaseUrl}/functions/v1`;
+
+  if (!baseUrl || (!isExternalApi && !anonKey)) {
     throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY");
   }
 
-  const res = await fetch(`${baseUrl}/functions/v1/${functionName}`, {
+  const url = isExternalApi ? baseUrl : `${baseUrl}/${functionName}`;
+  console.log(`[PiA2U] Invoking via fetch: ${url}`);
+
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${anonKey}`,
-      apikey: anonKey,
+      apikey: anonKey || "",
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),

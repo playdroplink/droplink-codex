@@ -89,7 +89,7 @@ export default function InboxConversations() {
 
       // Subscribe to new messages (Direct)
       const channel = supabase
-        .channel('inbox-conversations')
+        .channel(`inbox-conversations-${profileId}-${Date.now()}`)
         .on(
           'postgres_changes',
           {
@@ -102,12 +102,9 @@ export default function InboxConversations() {
         )
         .subscribe();
         
-      // Subscribe to new messages (Group) - Ideally we subscribe to all groups, but for now global or reload
-      // A better approach for groups is to subscribe to messages where group_id is in user's groups
-      // For simplicity, we'll just rely on the manual refresh or global events if feasible, 
-      // or we can subscribe to 'messages' globally and filter client side (not efficient but works for small scale)
+      // Subscribe to new messages (Group)
       const groupChannel = supabase
-        .channel('inbox-groups')
+        .channel(`inbox-groups-${profileId}-${Date.now()}`)
         .on(
           'postgres_changes',
           {

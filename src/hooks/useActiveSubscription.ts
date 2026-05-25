@@ -130,24 +130,26 @@ export const useActiveSubscription = (): ActiveSubscription => {
   }, [piUser?.username]);
 
   useEffect(() => {
+    if (!profileId) return;
+
     load();
 
-    // Subscribe to realtime changes for the user's subscription
+    // Use a unique channel name to avoid "cannot add callbacks after subscribe" error
+    // when the effect re-runs or when multiple components use this hook.
+    const channelName = `subscription_changes_${profileId}_${Date.now()}`;
     const channel = supabase
-      .channel('subscription_changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'subscriptions'
+          table: 'subscriptions',
+          filter: `profile_id=eq.${profileId}`
         },
         (payload) => {
-          // Refresh if the change affects the current user
-          if (profileId && (payload.new as any)?.profile_id === profileId) {
-            console.log('[ActiveSubscription] Subscription changed, reloading...');
-            load();
-          }
+          console.log('[ActiveSubscription] Subscription changed, reloading...');
+          load();
         }
       )
       .subscribe();

@@ -45,7 +45,7 @@ export default function InboxMessages({ receiverUsername }: InboxMessagesProps) 
       loadMessages();
       // Subscribe to new messages
       const channel = supabase
-        .channel('inbox-messages')
+        .channel(`inbox-messages-${profileId}-${Date.now()}`)
         .on(
           'postgres_changes',
           {

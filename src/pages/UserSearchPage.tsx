@@ -201,7 +201,7 @@ const UserSearchPage = () => {
     fetchCount();
     // Real-time subscription for new/deleted users
     subscription = supabase
-      .channel('public:profiles')
+      .channel(`public-profiles-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
         fetchCount();
       })
