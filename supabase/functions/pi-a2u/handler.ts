@@ -36,6 +36,15 @@ const PI_API_KEY = cleanSecret(Deno.env.get("PI_A2U_API_KEY") || Deno.env.get("P
 const PI_WALLET_SEED = cleanSecret(Deno.env.get("PI_WALLET_PRIVATE_SEED"));
 const PI_NETWORK = cleanSecret(Deno.env.get("PI_NETWORK") || "testnet");
 
+// Explicitly set the API URL in the environment so the SDK picks it up
+const PI_API_URL = PI_NETWORK === "testnet" 
+  ? "https://api.testnet.minepi.com" 
+  : "https://api.minepi.com";
+
+// Some SDK versions use process.env, Deno shim handles some of this
+// but we set it explicitly here to be safe
+Deno.env.set("PI_API_URL", PI_API_URL);
+
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
 type PiPayment = {
@@ -188,11 +197,23 @@ function extractLinkedTxid(err: unknown) {
 function extractErrorMessage(err: unknown) {
   const e = err as PiSdkError;
   const d = e?.response?.data;
-  return String(
+  
+  // If the error is already a JSON string containing the error, parse it
+  let msg = String(
     (d && (d.error_message || d.message || JSON.stringify(d))) ||
       e?.message ||
       "A2U payment failed",
   );
+
+  try {
+    const parsed = JSON.parse(msg);
+    if (parsed.error) return parsed.error;
+    if (parsed.message) return parsed.message;
+  } catch {
+    // Not JSON, continue
+  }
+
+  return msg;
 }
 
 function extractErrorStatus(err: unknown) {
@@ -550,11 +571,12 @@ async function handleClaim(uid: string, username: string, amount: number, memo: 
     amount,
     memo,
     secrets_present: {
-      pi_api_key: maskKey(PI_API_KEY),
-      pi_wallet_private_seed: maskKey(PI_WALLET_SEED),
-      pi_network: PI_NETWORK,
-    },
-  });
+        pi_api_key: maskKey(PI_API_KEY),
+        pi_wallet_private_seed: maskKey(PI_WALLET_SEED),
+        pi_network: PI_NETWORK,
+        pi_api_url: PI_API_URL,
+      },
+    });
 
   if (await hasSuccessfulReward(uid)) {
     await logStep("warn", "Claim blocked: already rewarded");
