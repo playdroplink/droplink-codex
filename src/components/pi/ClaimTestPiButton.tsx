@@ -33,11 +33,12 @@ export default function ClaimTestPiButton({ onSuccess, className }: Props) {
     try {
       let token = accessToken;
       if (!token) {
-        await signIn(["username", "payments", "wallet_address"]);
-        token = localStorage.getItem("pi_access_token");
+        const result = await signIn(["username", "payments", "wallet_address"]);
+        // If signIn returns the token directly (some versions of the context do)
+        token = (result as any)?.accessToken || localStorage.getItem("pi_access_token");
       }
       if (!token) {
-        throw new Error("Pi sign-in required. Please try again.");
+        throw new Error("Missing or invalid accessToken. Deploy edge functions (.\\deploy-pi-a2u.ps1), run the SQL migration, and set Supabase secrets. See PI_A2U_SETUP.md.");
       }
       const result = await claimTestnetPi(token, {
         amount: DEFAULT_AMOUNT,
