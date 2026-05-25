@@ -69,10 +69,10 @@ export function useNotifications(options: {
       }
     );
 
-    // Messages: new incoming message (assuming to_profile_id)
+    // Messages: new incoming message (assuming receiver_profile_id)
     ch.on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "messages", filter: `to_profile_id=eq.${pId}` },
+      { event: "INSERT", schema: "public", table: "messages", filter: `receiver_profile_id=eq.${pId}` },
       (payload: any) => {
         push({
           type: "message",

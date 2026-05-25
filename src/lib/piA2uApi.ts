@@ -97,45 +97,48 @@ async function invokeViaFetch<T>(
 
 async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
   let lastError: Error | null = null;
+  const action = body.action || "unknown";
 
   for (const functionName of FUNCTION_NAMES) {
-    const { data, error } = await supabase.functions.invoke(functionName, { body });
-    if (!error && data && !(data as { error?: string }).error) {
-      return data as T;
-    }
-
-    let msg = error?.message || (data as { error?: string })?.error || "Request failed";
-    const ctx = (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context;
     try {
-      if (ctx && typeof ctx.json === "function") {
-        const j = await ctx.json();
-        if (j?.error) msg = j.error;
+      console.log(`[PiA2U] Invoking ${functionName} for action: ${action}`);
+      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      
+      if (!error && data && !(data as { error?: string }).error) {
+        return data as T;
       }
-    } catch {
-      /* ignore */
-    }
 
-    if (!isEdgeUnavailable(msg)) {
-      throw new Error(msg);
-    }
-    lastError = new Error(msg);
+      let msg = error?.message || (data as { error?: string })?.error || "Request failed";
+      
+      // Attempt to extract more detailed error from context if available
+      const ctx = (error as any)?.context;
+      try {
+        if (ctx && typeof ctx.json === "function") {
+          const j = await ctx.json();
+          if (j?.error) msg = j.error;
+        }
+      } catch { /* ignore */ }
 
-    try {
+      if (!isEdgeUnavailable(msg)) {
+        console.error(`[PiA2U] ${functionName} error:`, msg);
+        throw new Error(msg);
+      }
+      
+      lastError = new Error(msg);
+      console.warn(`[PiA2U] ${functionName} unavailable, trying fetch fallback...`);
+
       return await invokeViaFetch<T>(functionName, body);
-    } catch (fetchErr) {
-      lastError = fetchErr instanceof Error ? fetchErr : new Error(String(fetchErr));
-      if (!isEdgeUnavailable(lastError.message)) {
-        throw lastError;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!isEdgeUnavailable(msg)) {
+        throw err; // Fatal error, don't retry next function
       }
+      lastError = err instanceof Error ? err : new Error(msg);
     }
   }
 
-  throw (
-    lastError ??
-    new Error(
-      "Pi A2U edge function is not deployed. Run: npx supabase functions deploy pi-a2u --project-ref jzzbmoopwnvgxxirulga",
-    )
-  );
+  const finalMsg = lastError?.message || "All connection attempts failed";
+  throw new Error(`${finalMsg}. Run: npx supabase functions deploy pi-a2u --project-ref jzzbmoopwnvgxxirulga`);
 }
 
 async function fetchWalletProgressFromDb(): Promise<WalletProgress> {

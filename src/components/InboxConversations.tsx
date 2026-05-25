@@ -262,7 +262,7 @@ export default function InboxConversations() {
 
       const directMap = new Map<string, any>();
 
-      // Optimize: Gather all unique user IDs first to fetch profiles in batch
+      // Optimize: Gather all unique user IDs first to fetch profiles and unread counts in batch
       const otherUserIds = new Set<string>();
       for (const msg of (messages as any[]) || []) {
         const otherUserId = msg.sender_profile_id === profileId
@@ -273,14 +273,38 @@ export default function InboxConversations() {
 
       // Fetch all relevant profiles in one go
       let profilesMap = new Map<string, any>();
+      let unreadCountsMap = new Map<string, number>();
+
       if (otherUserIds.size > 0) {
+        const userIdsArray = Array.from(otherUserIds);
+        
+        // 1. Fetch profiles
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
           .select('id, username, logo, business_name, last_active_at')
-          .in('id', Array.from(otherUserIds));
+          .in('id', userIdsArray);
         
         if (!profilesError && profiles) {
           profiles.forEach(p => profilesMap.set(p.id, p));
+        }
+
+        // 2. Fetch unread counts in batch (using RPC or multiple counts is hard, so we'll do one query and aggregate)
+        try {
+          const { data: unreadMsgs } = await supabase
+            .from('messages' as any)
+            .select('sender_profile_id')
+            .eq('receiver_profile_id', profileId)
+            .eq('is_read', false)
+            .in('sender_profile_id', userIdsArray);
+          
+          if (unreadMsgs) {
+            unreadMsgs.forEach((m: any) => {
+              const sid = m.sender_profile_id;
+              unreadCountsMap.set(sid, (unreadCountsMap.get(sid) || 0) + 1);
+            });
+          }
+        } catch (e) {
+          console.warn('[Inbox] Failed to fetch unread counts in batch', e);
         }
       }
 
@@ -293,21 +317,7 @@ export default function InboxConversations() {
 
         if (!directMap.has(otherUserId)) {
           const otherProfile = profilesMap.get(otherUserId);
-          
-          // Still need to fetch unread count separately or use a different approach
-          // For now, let's keep it per-user but handle errors gracefully
-          let unreadCount = 0;
-          try {
-             const { count } = await (supabase
-              .from('messages' as any)
-              .select('*', { count: 'exact', head: true })
-              .eq('sender_profile_id', otherUserId)
-              .eq('receiver_profile_id', profileId)
-              .eq('is_read', false) as any);
-             unreadCount = count || 0;
-          } catch (e) {
-            console.warn(`[Inbox] Failed to fetch unread count for ${otherUserId}`, e);
-          }
+          const unreadCount = unreadCountsMap.get(otherUserId) || 0;
 
           directMap.set(otherUserId, {
             type: 'direct',
@@ -363,13 +373,23 @@ export default function InboxConversations() {
       }
 
       const allConversations = [...directMap.values(), ...groupConversations];
-      // Sort by last message time
-      allConversations.sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime());
+      // Sort by last message time, handling invalid dates
+      allConversations.sort((a, b) => {
+        const timeA = new Date(a.lastMessageTime).getTime();
+        const timeB = new Date(b.lastMessageTime).getTime();
+        return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+      });
 
       setConversations(allConversations);
     } catch (error) {
-      console.error('[InboxConversations] Failed to load conversations:', error);
-      toast.error('Failed to load conversations');
+      // Check if it's a known table-missing error to avoid console noise
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('does not exist') || msg.includes('42P01')) {
+         console.warn('[InboxConversations] Tables not yet created in Supabase. Run migrations.');
+      } else {
+         console.error('[InboxConversations] Failed to load conversations:', error);
+         toast.error('Failed to load conversations');
+      }
     } finally {
       setLoading(false);
     }

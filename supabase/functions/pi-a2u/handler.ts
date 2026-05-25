@@ -134,8 +134,11 @@ function makeLogger(uid?: string, username?: string, amount = REWARD_AMOUNT, mem
 }
 
 function getPiClient(): PiClient {
-  if (!PI_API_KEY || !PI_WALLET_SEED) {
-    throw new Error("Missing PI_A2U_API_KEY or PI_WALLET_PRIVATE_SEED");
+  if (!PI_API_KEY) {
+    throw new Error("Missing PI_A2U_API_KEY. Set it via: npx supabase secrets set PI_A2U_API_KEY=...");
+  }
+  if (!PI_WALLET_SEED) {
+    throw new Error("Missing PI_WALLET_PRIVATE_SEED. Set it via: npx supabase secrets set PI_WALLET_PRIVATE_SEED=...");
   }
   const PiCtor: new (k: string, s: string) => PiClient =
     ((PiNetwork as unknown as { default?: new (k: string, s: string) => PiClient }).default ??
