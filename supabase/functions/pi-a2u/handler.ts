@@ -27,8 +27,9 @@ const MAX_CLAIM_AMOUNT = Number(Deno.env.get("PI_A2U_MAX_AMOUNT") || String(Math
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const PI_API_KEY = Deno.env.get("PI_A2U_API_KEY") || Deno.env.get("PI_API_KEY") || "";
-const PI_WALLET_SEED = Deno.env.get("PI_WALLET_PRIVATE_SEED") || "";
+const PI_API_KEY = (Deno.env.get("PI_A2U_API_KEY") || Deno.env.get("PI_API_KEY") || "").trim();
+const PI_WALLET_SEED = (Deno.env.get("PI_WALLET_PRIVATE_SEED") || "").trim();
+const PI_NETWORK = (Deno.env.get("PI_NETWORK") || "testnet").trim();
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -140,10 +141,15 @@ function getPiClient(): PiClient {
   if (!PI_WALLET_SEED) {
     throw new Error("Missing PI_WALLET_PRIVATE_SEED. Set it via: npx supabase secrets set PI_WALLET_PRIVATE_SEED=...");
   }
-  const PiCtor: new (k: string, s: string) => PiClient =
-    ((PiNetwork as unknown as { default?: new (k: string, s: string) => PiClient }).default ??
-      PiNetwork) as new (k: string, s: string) => PiClient;
-  return new PiCtor(PI_API_KEY, PI_WALLET_SEED);
+  
+  console.log(`[PiA2U] Initializing PiNetwork SDK for network: ${PI_NETWORK}`);
+  
+  const PiCtor: new (k: string, s: string, n: string) => PiClient =
+    ((PiNetwork as unknown as { default?: new (k: string, s: string, n: string) => PiClient }).default ??
+      PiNetwork) as new (k: string, s: string, n: string) => PiClient;
+  
+  // Pass network as 3rd argument (required for some SDK versions to authorize correctly)
+  return new PiCtor(PI_API_KEY, PI_WALLET_SEED, PI_NETWORK);
 }
 
 function getConfiguredWalletAddress(pi: PiClient) {
