@@ -1,4 +1,11 @@
 // @ts-ignore-file - Deno edge function
+/// <reference lib="deno.ns" />
+declare const Deno: {
+  env: { 
+    get: (key: string) => string | undefined;
+    set: (key: string, value: string) => void;
+  };
+};
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { A2U_ACTIONS, handlePiA2uRequest } from "../pi-a2u/handler.ts";
@@ -11,11 +18,9 @@ const corsHeaders = {
 };
 
 // Simplified Pi Auth function for sign-in only
-serve(async (req) => {
-  console.log(`[pi-auth] Incoming request: ${req.method}`);
-  
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
   try {

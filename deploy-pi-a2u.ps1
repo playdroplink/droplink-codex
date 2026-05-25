@@ -4,12 +4,12 @@ $ProjectRef = "jzzbmoopwnvgxxirulga"
 
 Write-Host "Deploying pi-a2u and pi-auth (A2U routes through pi-auth as fallback)..." -ForegroundColor Cyan
 
-npx supabase functions deploy pi-a2u --project-ref $ProjectRef
+npx supabase functions deploy pi-a2u --project-ref $ProjectRef --no-verify-jwt
 if ($LASTEXITCODE -ne 0) {
     Write-Host "pi-a2u deploy failed. Trying pi-auth only (includes A2U handler)..." -ForegroundColor Yellow
 }
 
-npx supabase functions deploy pi-auth --project-ref $ProjectRef
+npx supabase functions deploy pi-auth --project-ref $ProjectRef --no-verify-jwt
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Deploy failed. Log in: npx supabase login" -ForegroundColor Red
     exit 1

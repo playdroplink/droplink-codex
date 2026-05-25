@@ -703,7 +703,8 @@ export async function handlePiA2uRequest(
   req: Request,
   parsedBody?: Record<string, unknown>,
 ): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: corsHeaders });
+
   try {
     const body = parsedBody ?? ((await req.json().catch(() => ({}))) as Record<string, unknown>);
     const action = String(body?.action || "");

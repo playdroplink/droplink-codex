@@ -67,7 +67,8 @@ async function invokeViaFetch<T>(
     externalApiUrl && 
     !externalApiUrl.includes("supabase.co") && 
     !externalApiUrl.includes("localhost") && 
-    !externalApiUrl.includes("127.0.0.1");
+    !externalApiUrl.includes("127.0.0.1") &&
+    externalApiUrl.startsWith("http");
     
   const baseUrl = isExternalApi ? externalApiUrl : `${supabaseUrl}/functions/v1`;
 
@@ -76,8 +77,9 @@ async function invokeViaFetch<T>(
   }
 
   // Strategy: Pass apikey as query param to avoid some CORS preflight issues in Pi Browser
+  // Only add apikey to Supabase URLs, not external ones
   const url = isExternalApi 
-    ? baseUrl 
+    ? `${baseUrl}/${functionName}` 
     : `${baseUrl}/${functionName}${anonKey ? `?apikey=${encodeURIComponent(anonKey)}` : ""}`;
   
   try {
@@ -85,11 +87,9 @@ async function invokeViaFetch<T>(
       method: "POST",
       mode: "cors",
       credentials: "omit",
-      referrerPolicy: "no-referrer",
       headers: {
-        // Only keep essential headers
         "Content-Type": "application/json",
-        ...(anonKey ? { Authorization: `Bearer ${anonKey}` } : {}),
+        ...(anonKey ? { "apikey": anonKey } : {}),
       },
       body: JSON.stringify(body),
     });
