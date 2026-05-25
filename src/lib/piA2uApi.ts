@@ -48,7 +48,9 @@ function isEdgeUnavailable(message: string): boolean {
     m.includes("not found") ||
     m.includes("failed to fetch") ||
     m.includes("load failed") ||
-    m.includes("network error")
+    m.includes("network error") ||
+    m.includes("cors") ||
+    m.includes("opaque")
   );
 }
 
@@ -120,7 +122,10 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
       } catch { /* ignore */ }
 
       if (!isEdgeUnavailable(msg)) {
-        console.error(`[PiA2U] ${functionName} error:`, msg);
+        // Don't log common auth/access errors as "errors" in the console if they are expected
+        if (!msg.includes("accessToken") && !msg.includes("auth")) {
+          console.error(`[PiA2U] ${functionName} error:`, msg);
+        }
         throw new Error(msg);
       }
       
@@ -231,7 +236,8 @@ export async function fetchWalletProgress(): Promise<WalletProgress> {
     });
     return result.data;
   } catch (edgeErr) {
-    if (isEdgeUnavailable(edgeErr instanceof Error ? edgeErr.message : String(edgeErr))) {
+    const msg = edgeErr instanceof Error ? edgeErr.message : String(edgeErr);
+    if (isEdgeUnavailable(msg) || msg.includes("Missing accessToken") || msg.includes("auth failed")) {
       return fetchWalletProgressFromDb();
     }
     throw edgeErr;
