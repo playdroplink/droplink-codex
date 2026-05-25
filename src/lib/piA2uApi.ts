@@ -71,8 +71,7 @@ async function invokeViaFetch<T>(
   }
 
   const url = isExternalApi ? baseUrl : `${baseUrl}/${functionName}`;
-  console.log(`[PiA2U] Invoking via fetch: ${url}`);
-
+  
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -103,7 +102,6 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
 
   for (const functionName of FUNCTION_NAMES) {
     try {
-      console.log(`[PiA2U] Invoking ${functionName} for action: ${action}`);
       const { data, error } = await supabase.functions.invoke(functionName, { body });
       
       if (!error && data && !(data as { error?: string }).error) {
@@ -122,16 +120,14 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
       } catch { /* ignore */ }
 
       if (!isEdgeUnavailable(msg)) {
-        // Don't log common auth/access errors as "errors" in the console if they are expected
+        // Only log to console if it's not a common auth/access error
         if (!msg.includes("accessToken") && !msg.includes("auth")) {
-          console.error(`[PiA2U] ${functionName} error:`, msg);
+          console.warn(`[PiA2U] ${functionName} action "${action}" failed:`, msg);
         }
         throw new Error(msg);
       }
       
       lastError = new Error(msg);
-      console.warn(`[PiA2U] ${functionName} unavailable, trying fetch fallback...`);
-
       return await invokeViaFetch<T>(functionName, body);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
