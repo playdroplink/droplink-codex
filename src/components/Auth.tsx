@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Mail } from "lucide-react";
+import { Mail, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { usePi } from "@/contexts/PiContext";
 
@@ -273,6 +273,15 @@ export const Auth = () => {
               >
                 {piLoading ? "Connecting..." : "Sign in with Pi Network"}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                onClick={() => navigate('/testnet-reward')}
+              >
+                <Gift className="w-4 h-4 mr-2" />
+                Claim Test Pi (A2U)
+              </Button>
             </div>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -332,6 +341,8 @@ export const Auth = () => {
                   <a href="/terms" className="text-primary hover:underline">Terms</a>
                   <span className="text-muted-foreground">•</span>
                   <a href="/privacy" className="text-primary hover:underline">Privacy</a>
+                  <span className="text-muted-foreground">•</span>
+                  <a href="/testnet-reward" className="text-primary hover:underline">A2U Reward</a>
                   <span className="text-muted-foreground">•</span>
                   <a
                     href="https://www.droplink.space/help"

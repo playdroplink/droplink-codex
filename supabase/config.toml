@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.pi-auth]
 verify_jwt = false
 
+[functions.pi-a2u]
+verify_jwt = false
+
 [functions.subscription]
 verify_jwt = false
 

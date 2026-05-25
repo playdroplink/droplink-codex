@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Mail, Search, Users, Menu, Store, BarChart3, TrendingUp, Bot, Globe, CreditCard, Wallet as WalletIcon, Crown, Info, LogOut, User, Download } from 'lucide-react';
+import { Home, Mail, Search, Users, Menu, Store, BarChart3, TrendingUp, Bot, Globe, CreditCard, Wallet as WalletIcon, Crown, Info, LogOut, User, Download, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { usePi } from '@/contexts/PiContext';
@@ -14,6 +14,14 @@ import {
   DrawerTrigger,
 } from '@/components/ui/drawer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
+type InboxMessageRow = {
+  id: string;
+  sender_profile_id: string | null;
+  receiver_profile_id: string | null;
+  content: string;
+  created_at: string;
+};
 
 export const FooterNav: React.FC = () => {
   const navigate = useNavigate();
@@ -40,12 +48,13 @@ export const FooterNav: React.FC = () => {
     let followerChannel: ReturnType<typeof supabase.channel> | null = null;
 
     const loadUnreadCount = async (profileId: string) => {
-      const { count } = await supabase
-        .from('messages' as any)
+      const { count, error } = await supabase
+        .from('messages')
         .select('id', { count: 'exact', head: true })
         .eq('receiver_profile_id', profileId)
         .eq('is_read', false)
         .is('group_id', null);
+      if (error) return;
       setUnreadCount(count || 0);
     };
 
@@ -164,16 +173,18 @@ export const FooterNav: React.FC = () => {
     setLoadingConversations(true);
     try {
       const { data, error } = await supabase
-        .from('messages' as any)
+        .from('messages')
         .select('id, sender_profile_id, receiver_profile_id, content, created_at')
         .or(`sender_profile_id.eq.${profileId},receiver_profile_id.eq.${profileId}`)
         .is('group_id', null)
         .order('created_at', { ascending: false })
         .limit(50);
       if (error) throw error;
+      const rows = (data || []) as InboxMessageRow[];
       const map = new Map<string, { otherUserId: string; lastMessage: string; createdAt: string }>();
-      for (const msg of data || []) {
-        const otherUserId = msg.sender_profile_id === profileId ? msg.receiver_profile_id : msg.sender_profile_id;
+      for (const msg of rows) {
+        const otherUserId =
+          msg.sender_profile_id === profileId ? msg.receiver_profile_id : msg.sender_profile_id;
         if (!otherUserId || map.has(otherUserId)) continue;
         map.set(otherUserId, {
           otherUserId,
@@ -191,7 +202,9 @@ export const FooterNav: React.FC = () => {
         .select('id, username, logo')
         .in('id', ids);
       const profileMap = new Map<string, { username: string; logo?: string | null }>();
-      (profiles || []).forEach((p: any) => profileMap.set(p.id, { username: p.username, logo: p.logo }));
+      (profiles || []).forEach((p) =>
+        profileMap.set(p.id, { username: p.username, logo: p.logo }),
+      );
       const list = Array.from(map.values()).map((item) => ({
         otherUserId: item.otherUserId,
         username: profileMap.get(item.otherUserId)?.username || 'Anonymous',
@@ -200,8 +213,8 @@ export const FooterNav: React.FC = () => {
         createdAt: item.createdAt,
       }));
       setConversations(list);
-    } catch (error) {
-      console.error('[FooterNav] Failed to load conversations:', error);
+    } catch {
+      setConversations([]);
     } finally {
       setLoadingConversations(false);
     }
@@ -381,6 +394,30 @@ export const FooterNav: React.FC = () => {
                     >
                       <TrendingUp className="w-4 h-4" />
                       Affiliate Program
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-sky-200/70 dark:border-sky-800/70 bg-sky-50/70 dark:bg-sky-950/30 p-2.5">
+                  <div className="text-[11px] uppercase tracking-wide text-sky-600 dark:text-sky-400 px-1 py-1 font-semibold">Pi Network (A2U)</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Button
+                      onClick={() => navigate('/testnet-reward')}
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start gap-2 h-10 bg-white/80 dark:bg-slate-950/40 border-sky-200/80 dark:border-sky-700/70 shadow-sm hover:shadow-md hover:border-sky-400"
+                    >
+                      <Gift className="w-4 h-4 text-sky-600" />
+                      Claim Test Pi
+                    </Button>
+                    <Button
+                      onClick={() => navigate('/admin/testnet-progress')}
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start gap-2 h-10 bg-white/80 dark:bg-slate-950/40 border-sky-200/80 dark:border-sky-700/70 shadow-sm hover:shadow-md"
+                    >
+                      <BarChart3 className="w-4 h-4 text-sky-600" />
+                      A2U Progress
                     </Button>
                   </div>
                 </div>

@@ -331,30 +331,33 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          group_id: string | null
           id: string
           image_url: string | null
           is_read: boolean | null
-          receiver_profile_id: string
+          receiver_profile_id: string | null
           sender_profile_id: string | null
           updated_at: string
         }
         Insert: {
           content: string
           created_at?: string
+          group_id?: string | null
           id?: string
           image_url?: string | null
           is_read?: boolean | null
-          receiver_profile_id: string
+          receiver_profile_id?: string | null
           sender_profile_id?: string | null
           updated_at?: string
         }
         Update: {
           content?: string
           created_at?: string
+          group_id?: string | null
           id?: string
           image_url?: string | null
           is_read?: boolean | null
-          receiver_profile_id?: string
+          receiver_profile_id?: string | null
           sender_profile_id?: string | null
           updated_at?: string
         }

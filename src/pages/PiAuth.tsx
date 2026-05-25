@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AboutModal } from "@/components/AboutModal";
@@ -185,6 +185,17 @@ const PiAuth = () => {
             </a>
           </Button>
 
+          {/* Pi A2U Testnet reward */}
+          <Button
+            className="w-full mb-2 text-white text-base font-semibold bg-emerald-600 hover:bg-emerald-700"
+            size="lg"
+            variant="default"
+            onClick={() => navigate('/testnet-reward')}
+          >
+            <Gift className="w-4 h-4 mr-2" />
+            Claim Test Pi (A2U)
+          </Button>
+
           {/* Droplink Social Button */}
           <Button
             asChild
@@ -260,6 +271,14 @@ const PiAuth = () => {
               <DropPayModal>
                 <button className="text-primary hover:underline cursor-pointer">DropPay</button>
               </DropPayModal>
+              <span className="text-muted-foreground">•</span>
+              <button
+                type="button"
+                className="text-primary hover:underline cursor-pointer"
+                onClick={() => navigate('/testnet-reward')}
+              >
+                A2U Reward
+              </button>
             </div>
             <div className="flex flex-wrap justify-center gap-2 text-xs">
               <a href="/terms" className="text-primary hover:underline">Terms</a>

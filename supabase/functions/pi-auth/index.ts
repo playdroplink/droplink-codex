@@ -1,6 +1,7 @@
 // @ts-ignore-file - Deno edge function
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { A2U_ACTIONS, handlePiA2uRequest } from "../pi-a2u/handler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,6 +25,12 @@ serve(async (req) => {
     } catch (parseError) {
       console.error("Request body parse error:", parseError);
       throw new Error("Invalid request body - must be valid JSON");
+    }
+
+    const action = String(requestBody?.action || "");
+    if (action && A2U_ACTIONS.has(action)) {
+      console.log("[pi-auth] Routing A2U action:", action);
+      return handlePiA2uRequest(req, requestBody);
     }
 
     const { accessToken } = requestBody;
