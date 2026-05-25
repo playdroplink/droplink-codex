@@ -25,11 +25,16 @@ const REWARD_AMOUNT = Number(Deno.env.get("PI_A2U_AMOUNT") || "0.01");
 const DEFAULT_MEMO = Deno.env.get("PI_A2U_MEMO") || "Testnet reward";
 const MAX_CLAIM_AMOUNT = Number(Deno.env.get("PI_A2U_MAX_AMOUNT") || String(Math.max(REWARD_AMOUNT, 10)));
 
+function cleanSecret(val: string | undefined): string {
+  if (!val) return "";
+  return val.trim().replace(/^["']|["']$/g, "").trim();
+}
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const PI_API_KEY = (Deno.env.get("PI_A2U_API_KEY") || Deno.env.get("PI_API_KEY") || "").trim();
-const PI_WALLET_SEED = (Deno.env.get("PI_WALLET_PRIVATE_SEED") || "").trim();
-const PI_NETWORK = (Deno.env.get("PI_NETWORK") || "testnet").trim();
+const PI_API_KEY = cleanSecret(Deno.env.get("PI_A2U_API_KEY") || Deno.env.get("PI_API_KEY"));
+const PI_WALLET_SEED = cleanSecret(Deno.env.get("PI_WALLET_PRIVATE_SEED"));
+const PI_NETWORK = cleanSecret(Deno.env.get("PI_NETWORK") || "testnet");
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -532,6 +537,11 @@ async function createPaymentWithRecovery(
   }
 }
 
+function maskKey(key: string): string {
+  if (!key || key.length < 8) return "***";
+  return `${key.slice(0, 4)}...${key.slice(-4)}`;
+}
+
 async function handleClaim(uid: string, username: string, amount: number, memo: string) {
   const logStep = makeLogger(uid, username, amount, memo);
   await logStep("info", "Claim request received", {
@@ -540,8 +550,9 @@ async function handleClaim(uid: string, username: string, amount: number, memo: 
     amount,
     memo,
     secrets_present: {
-      pi_api_key: Boolean(PI_API_KEY),
-      pi_wallet_private_seed: Boolean(PI_WALLET_SEED),
+      pi_api_key: maskKey(PI_API_KEY),
+      pi_wallet_private_seed: maskKey(PI_WALLET_SEED),
+      pi_network: PI_NETWORK,
     },
   });
 
