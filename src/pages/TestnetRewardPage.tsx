@@ -19,8 +19,18 @@ const TestnetRewardPage = () => {
   useEffect(() => {
     fetchWalletProgress()
       .then(setProgress)
-      .catch((e) => setLoadError(e instanceof Error ? e.message : "Could not load progress"));
+      .catch((e) => {
+        console.error("[TestnetReward] Load error:", e);
+        setLoadError(e instanceof Error ? e.message : "Could not load progress");
+      });
   }, []);
+
+  const handleRetry = () => {
+    setLoadError(null);
+    fetchWalletProgress()
+      .then(setProgress)
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Could not load progress"));
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white pb-24">
@@ -51,15 +61,29 @@ const TestnetRewardPage = () => {
             )}
 
             {loadError && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Setup required</AlertTitle>
-                <AlertDescription>
-                  {loadError}. Deploy edge functions (<code className="text-xs">.\deploy-pi-a2u.ps1</code>),
-                  run the SQL migration, and set Supabase secrets. See{" "}
-                  <code className="text-xs">PI_A2U_SETUP.md</code>.
-                </AlertDescription>
-              </Alert>
+              <div className="space-y-3">
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Connection Problem</AlertTitle>
+                  <AlertDescription className="text-xs break-all">
+                    {loadError}
+                  </AlertDescription>
+                </Alert>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full text-xs" 
+                  onClick={handleRetry}
+                >
+                  Retry Connection
+                </Button>
+                <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-[10px] text-amber-800 space-y-1">
+                  <p className="font-bold">Troubleshooting Check:</p>
+                  <p>1. Open this in <b>Pi Browser</b>, not a regular browser.</p>
+                  <p>2. Ensure <b>.\deploy-pi-a2u.ps1</b> was run on your project.</p>
+                  <p>3. If using VPN or proxy, try disabling it.</p>
+                </div>
+              </div>
             )}
 
             {!inPiBrowser && (

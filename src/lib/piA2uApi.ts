@@ -127,10 +127,12 @@ async function invokePiA2U<T>(body: Record<string, unknown>): Promise<T> {
       }
       
       // If it's a network/not-found error, try the fetch fallback
+      console.warn(`[PiA2U] ${functionName} invocation failed, trying fetch fallback... Error:`, error || msg);
       lastError = new Error(msg);
       return await invokeViaFetch<T>(functionName, body);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[PiA2U] Attempt for ${functionName} failed:`, err);
       
       // If it's a fatal logic error from the backend, don't retry other functions
       if (!isEdgeUnavailable(msg)) {
