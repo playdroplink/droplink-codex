@@ -13,7 +13,7 @@ export const A2U_ACTIONS = new Set(["auth_verify", "progress", "admin_dashboard"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-pi-sdk-version",
+  "Access-Control-Allow-Headers": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };

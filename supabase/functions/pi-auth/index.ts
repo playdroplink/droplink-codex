@@ -5,32 +5,35 @@ import { A2U_ACTIONS, handlePiA2uRequest } from "../pi-a2u/handler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-pi-sdk-version',
+  'Access-Control-Allow-Headers': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
 };
 
 // Simplified Pi Auth function for sign-in only
 serve(async (req) => {
+  console.log(`[pi-auth] Incoming request: ${req.method}`);
+  
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    const url = new URL(req.url);
+    console.log(`[pi-auth] Request URL: ${url.pathname}${url.search ? '?' + url.search.substring(0, 20) + '...' : ''}`);
+    
     // Validate request body
-
     let requestBody;
     try {
       requestBody = await req.json();
-      console.log("Incoming request body:", JSON.stringify(requestBody));
     } catch (parseError) {
-      console.error("Request body parse error:", parseError);
+      console.error("[pi-auth] Request body parse error:", parseError);
       throw new Error("Invalid request body - must be valid JSON");
     }
 
     const action = String(requestBody?.action || "");
     if (action && A2U_ACTIONS.has(action)) {
-      console.log("[pi-auth] Routing A2U action:", action);
+      console.log(`[pi-auth] Routing A2U action: ${action}`);
       return handlePiA2uRequest(req, requestBody);
     }
 

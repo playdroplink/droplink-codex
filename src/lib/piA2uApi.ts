@@ -72,18 +72,24 @@ async function invokeViaFetch<T>(
   const baseUrl = isExternalApi ? externalApiUrl : `${supabaseUrl}/functions/v1`;
 
   if (!baseUrl || (!isExternalApi && !anonKey)) {
-    throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY");
+    throw new Error(`Config missing: URL=${!!baseUrl}, Key=${!!anonKey}`);
   }
 
-  const url = isExternalApi ? baseUrl : `${baseUrl}/${functionName}`;
+  // Strategy: Pass apikey as query param to avoid some CORS preflight issues in Pi Browser
+  const url = isExternalApi 
+    ? baseUrl 
+    : `${baseUrl}/${functionName}${anonKey ? `?apikey=${encodeURIComponent(anonKey)}` : ""}`;
   
   try {
     const res = await fetch(url, {
       method: "POST",
+      mode: "cors",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
       headers: {
-        Authorization: `Bearer ${anonKey}`,
-        apikey: anonKey || "",
+        // Only keep essential headers
         "Content-Type": "application/json",
+        ...(anonKey ? { Authorization: `Bearer ${anonKey}` } : {}),
       },
       body: JSON.stringify(body),
     });
@@ -102,7 +108,9 @@ async function invokeViaFetch<T>(
     return payload as T;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`${msg} (Target: ${url})`);
+    // Add environment context to the error for better user debugging
+    const context = `[UA: ${navigator.userAgent.slice(0, 30)}...]`;
+    throw new Error(`${msg} ${context} (Target: ${url.split("?")[0]})`);
   }
 }
 
