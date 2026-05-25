@@ -124,7 +124,7 @@ async function logDiagnostic(params: {
       created_at: now,
       updated_at: now,
     })
-    .then(({ error }) => {
+    .then(({ error }: { error: any }) => {
       if (error) console.error("Log persist failed", error.message);
     });
 }
@@ -629,10 +629,10 @@ async function getAdminDashboard() {
     .from("pi_a2u_wallets")
     .select("wallet_address, uid, username, txid, payment_id, created_at")
     .order("created_at", { ascending: false });
-  const transactions = (txs || []).filter((t) => !String(t.status || "").startsWith("log_"));
+  const transactions = (txs || []).filter((t: any) => !String(t.status || "").startsWith("log_"));
   const logs = (txs || [])
-    .filter((t) => String(t.status || "").startsWith("log_"))
-    .map((t) => {
+    .filter((t: any) => String(t.status || "").startsWith("log_"))
+    .map((t: any) => {
       let parsed: Record<string, unknown> = {};
       try {
         parsed = JSON.parse(String(t.error || "{}"));
@@ -648,13 +648,13 @@ async function getAdminDashboard() {
         username: t.username,
       };
     });
-  const success = transactions.filter((t) => t.status === "success");
-  const failed = transactions.filter((t) => t.status === "failed");
+  const success = transactions.filter((t: any) => t.status === "success");
+  const failed = transactions.filter((t: any) => t.status === "failed");
   return {
     progress: { ...progress, wallets: wallets || [] },
     total_successful_a2u: success.length,
     unique_wallets_count: (wallets || []).length,
-    wallet_addresses: (wallets || []).map((w) => w.wallet_address),
+    wallet_addresses: (wallets || []).map((w: any) => w.wallet_address),
     transactions,
     successful_transactions: success,
     failed_transactions: failed,
