@@ -19,12 +19,20 @@
       <!-- PiNet (Pi Network) Meta Tags -->
       <!-- ========================= -->
       <meta name="pi-app" content="true" />
-      <meta name="pi-network" content="mainnet" />
+      <script>
+        (function() {
+          const isTestnet = window.location.hostname.includes('testnet') || 
+                           window.location.hostname.includes('localhost');
+          document.write('<meta name="pi-network" content="' + (isTestnet ? 'testnet' : 'mainnet') + '" />');
+          if (!isTestnet) {
+            document.write('<meta name="pi-mainnet-ready" content="true" />');
+          }
+        })();
+      </script>
       <meta name="pi-app-name" content="DropLink" />
       <meta name="pi-app-version" content="1.0.0" />
       <meta name="pi-validation-url" content="https://droplink.space/validation-key.txt" />
       <meta name="pi-app-url" content="https://droplink.space" />
-      <meta name="pi-mainnet-ready" content="true" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -49,14 +57,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
-    <!-- Pi Browser Compatibility -->
-    <meta name="pi-app" content="true" />
-    <meta name="pi-network" content="mainnet" />
-    <meta name="pi-app-name" content="DropLink" />
-    <meta name="pi-app-version" content="1.0.0" />
-
-    <!-- Content Security Policy for Pi Browser - MAINNET ONLY -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com https://api.minepi.com https://socialchain.app https://horizon.stellar.org https://jzzbmoopwnvgxxirulga.supabase.co https://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https://sdk.minepi.com https://api.minepi.com https://socialchain.app https://horizon.stellar.org https://jzzbmoopwnvgxxirulga.supabase.co https://*.supabase.co wss://*.supabase.co https://droplink.space; frame-src 'self' https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com https://www.youtube.googleapis.com;" />
+    <!-- Content Security Policy for Pi Browser -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com https://api.minepi.com https://api.testnet.minepi.com https://socialchain.app https://horizon.stellar.org https://jzzbmoopwnvgxxirulga.supabase.co https://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https://sdk.minepi.com https://api.minepi.com https://api.testnet.minepi.com https://socialchain.app https://horizon.stellar.org https://jzzbmoopwnvgxxirulga.supabase.co https://*.supabase.co wss://*.supabase.co https://droplink.space; frame-src 'self' https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com https://www.youtube.googleapis.com;" />
 
     <title>DropLink - Link in Bio, Digital Products & Pi Network Integration | Create Your Personal Page</title>
     <meta name="description" content="Create your professional link-in-bio page with DropLink. Sell digital products, accept Pi Network payments, display social links, and monetize with Pi Ad Network. Free to start!" />
@@ -85,10 +87,27 @@
     <!-- Following: https://pi-apps.github.io/community-developer-guide/docs/gettingStarted/piAppPlatform/piAppPlatformSDK/ -->
     <script src="https://sdk.minepi.com/pi-sdk.js"></script>
     <script>
-      // Initialize Pi SDK - Version 2.0 (Mainnet Production)
-      // This must be called before any other Pi SDK functions
-      Pi.init({ version: "2.0" });
-      console.log('[PI SDK] ✅ Pi SDK initialized with version 2.0');
+      (function() {
+        // Detect if we should use sandbox/testnet based on URL or environment
+        // In production, we typically use mainnet, but for this A2U task we need testnet support
+        const isTestnet = window.location.hostname.includes('testnet') || 
+                         window.location.hostname.includes('localhost') || 
+                         window.location.hostname.includes('127.0.0.1');
+        
+        const config = { 
+          version: "2.0",
+          sandbox: isTestnet 
+        };
+        
+        console.log('[PI SDK] Initializing with config:', JSON.stringify(config));
+        
+        if (typeof Pi !== 'undefined') {
+          Pi.init(config);
+          console.log('[PI SDK] \u2705 Pi SDK initialized successfully');
+        } else {
+          console.error('[PI SDK] \u274c Pi SDK not found on window object');
+        }
+      })();
     </script>
 
 

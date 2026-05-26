@@ -16,6 +16,7 @@ Write-Host ""
 # List of critical edge functions for PI payments
 $CRITICAL_FUNCTIONS = @(
     @{ Name = "pi-auth"; Description = "Pi Network user authentication" },
+    @{ Name = "pi-a2u"; Description = "Pi App-to-User payments" },
     @{ Name = "pi-payment-approve"; Description = "Pi payment approval processing" },
     @{ Name = "pi-payment-complete"; Description = "Pi payment completion handling" },
     @{ Name = "pi-ad-verify"; Description = "Pi ad network verification" },
@@ -72,7 +73,9 @@ Write-Host ""
 Write-Host "🔐 Setting Up PI Payment Secrets..." -ForegroundColor Cyan
 
 $PI_SECRETS = @{
-    "PI_API_KEY" = "b00j4felp0ctc1fexe8igldsjg9u7wbqitavc15si53fr9wwra7r6oluzk4j24qz"
+    "PI_API_KEY" = "x62ea5gjqi4fv1x5cojbi84al9zzdstehnnm3tfzjlt4bol8pq1eohej2udoelhw"
+    "PI_A2U_API_KEY" = "x62ea5gjqi4fv1x5cojbi84al9zzdstehnnm3tfzjlt4bol8pq1eohej2udoelhw"
+    "PI_VALIDATION_KEY" = "26ec4458680b98edc16b18ed68c2fb7841ee2c9d3b9cfdcfa82de36bea71f64074a2ee5d1fbea04762df431edb1458b44a2ff50679b16d93935b0b645e98174a"
     "PI_MAINNET_MODE" = "true"
     "PI_NETWORK" = "Pi Network"
     "PI_ENVIRONMENT" = "mainnet"

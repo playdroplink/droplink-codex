@@ -13,13 +13,15 @@ import { A2U_ACTIONS, handlePiA2uRequest } from "../pi-a2u/handler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Max-Age': '86400',
 };
 
 // Simplified Pi Auth function for sign-in only
 serve(async (req: Request) => {
+  console.log(`[pi-auth] Incoming request: ${req.method} ${req.url}`);
+  
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: corsHeaders });
   }
@@ -52,14 +54,13 @@ serve(async (req: Request) => {
     }
 
     // Verify the access token with Pi API
-    // PRODUCTION ONLY - MAINNET (NO SANDBOX)
-    const piApiUrl = 'https://api.minepi.com/v2/me';
-    const piApiKey = Deno.env.get('VITE_PI_API_KEY') || Deno.env.get('PI_API_KEY');
+    const piNetwork = Deno.env.get('PI_NETWORK') || 'testnet';
+    const piApiUrl = piNetwork === 'testnet' ? 'https://api.testnet.minepi.com/v2/me' : 'https://api.minepi.com/v2/me';
+    const piApiKey = Deno.env.get('PI_API_KEY') || Deno.env.get('VITE_PI_API_KEY');
     
     let piUserData;
     try {
-      console.log('Verifying token with Pi API (MAINNET): ' + piApiUrl);
-      console.log('Network: MAINNET - Sandbox/Testnet DISABLED');
+      console.log(`Verifying token with Pi API (${piNetwork.toUpperCase()}): ${piApiUrl}`);
       
       const headers: Record<string, string> = {
         "Authorization": `Bearer ${accessToken}`,
@@ -75,7 +76,7 @@ serve(async (req: Request) => {
       });
 
       const piResponseText = await piResponse.text();
-      console.log("Pi API raw response:", piResponse.status, piResponseText);
+      console.log(`Pi API raw response (${piResponse.status}):`, piResponseText);
 
       if (!piResponse.ok) {
         console.error("Pi API error:", piResponse.status, piResponseText);

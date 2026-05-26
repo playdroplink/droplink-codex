@@ -9,13 +9,17 @@
 
 import { isPiBrowserEnv } from "@/contexts/PiContext";
 
-// PRODUCTION ONLY - NO SANDBOX, NO TESTNET
-const sandboxFlag = false; // HARDCODED: Always mainnet
+// Detect environment mode
+const isTestnetMode = 
+  import.meta.env.VITE_PI_NETWORK === 'testnet' || 
+  window.location.hostname.includes('testnet') || 
+  window.location.hostname.includes('localhost');
+
+const sandboxFlag = isTestnetMode;
 
 // Log configuration for debugging
 if (typeof window !== 'undefined') {
-  console.log('[PI CONFIG] 🌐 Network Mode: MAINNET (Production)');
-  console.log('[PI CONFIG] Sandbox/Testnet: DISABLED');
+  console.log(`[PI CONFIG] \u{1F310} Network Mode: ${isTestnetMode ? 'TESTNET (Sandbox)' : 'MAINNET (Production)'}`);
 }
 
 // Pi Network Credentials - From Pi Developer Portal
@@ -25,11 +29,11 @@ const PI_VALIDATION_KEY = "26ec4458680b98edc16b18ed68c2fb7841ee2c9d3b9cfdcfa82de
 const PLATFORM_URL = import.meta.env.VITE_PLATFORM_URL ?? "https://droplink.space";
 const PAYMENT_RECEIVER_WALLET = import.meta.env.VITE_PI_PAYMENT_RECEIVER_WALLET ?? "GDSXE723WPHZ5RGIJCSYXTPKSOIGPTSXE4RF5U3JTNGTCHXON7ZVD4LJ";
 
-// PRODUCTION ONLY - Mainnet URLs (force HTTPS)
-const BASE_API_URL = "https://api.minepi.com";
-const HORIZON_URL = "https://api.minepi.com";
-const NETWORK_NAME = "mainnet";
-const NETWORK_PASSPHRASE = "Pi Mainnet";
+// Base URLs based on network
+const BASE_API_URL = isTestnetMode ? "https://api.testnet.minepi.com" : "https://api.minepi.com";
+const HORIZON_URL = isTestnetMode ? "https://api.testnet.minepi.com" : "https://api.minepi.com";
+const NETWORK_NAME = isTestnetMode ? "testnet" : "mainnet";
+const NETWORK_PASSPHRASE = isTestnetMode ? "Pi Testnet" : "Pi Mainnet";
 
 export const PI_CONFIG = {
   API_KEY: PI_API_KEY,
@@ -40,10 +44,9 @@ export const PI_CONFIG = {
   ALLOW_MULTIPLE_ACCOUNTS: true,
 
   // Pi SDK Configuration - Following official guide
-  // https://pi-apps.github.io/community-developer-guide/docs/gettingStarted/piAppPlatform/piAppPlatformSDK/
   SDK: {
-    version: "2.0", // Latest SDK version as of August 2022
-    sandbox: false, // Mainnet production mode
+    version: "2.0",
+    sandbox: sandboxFlag,
   },
   
   // Official Documentation Links

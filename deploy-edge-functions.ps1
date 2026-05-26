@@ -62,6 +62,7 @@ Write-Host ""
 # Deploy edge functions
 $functions = @(
     "pi-auth",
+    "pi-a2u",
     "pi-payment-approve",
     "pi-payment-complete",
     "pi-ad-verify",

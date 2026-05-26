@@ -6,10 +6,11 @@
 echo "🔐 Updating Supabase secrets for Pi Network Mainnet..."
 
 # Set the new Pi API Key
-npx supabase secrets set PI_API_KEY=b00j4felp0ctc1fexe8igldsjg9u7wbqitavc15si53fr9wwra7r6oluzk4j24qz
+npx supabase secrets set PI_API_KEY=x62ea5gjqi4fv1x5cojbi84al9zzdstehnnm3tfzjlt4bol8pq1eohej2udoelhw
+npx supabase secrets set PI_A2U_API_KEY=x62ea5gjqi4fv1x5cojbi84al9zzdstehnnm3tfzjlt4bol8pq1eohej2udoelhw
 
 # Set the validation key
-npx supabase secrets set PI_VALIDATION_KEY=7511661aac4538b1832d2c9ba117f6d972b26a54640598d3fbb9824013c7079203f65b02d125be3f418605cfb89ba0e4443e3ec997e3800eb464df0bc5410d2a
+npx supabase secrets set PI_VALIDATION_KEY=26ec4458680b98edc16b18ed68c2fb7841ee2c9d3b9cfdcfa82de36bea71f64074a2ee5d1fbea04762df431edb1458b44a2ff50679b16d93935b0b645e98174a
 
 echo "✅ Secrets updated successfully!"
 echo ""

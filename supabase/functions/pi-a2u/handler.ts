@@ -13,8 +13,8 @@ export const A2U_ACTIONS = new Set(["auth_verify", "progress", "admin_dashboard"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -234,10 +234,12 @@ function isPaymentVerified(p: PiPayment) {
 }
 
 async function verifyPiAccessToken(token: string) {
-  const r = await fetch("https://api.minepi.com/v2/me", {
+  const url = `${PI_API_URL}/v2/me`;
+  console.log(`[pi-a2u] Verifying token at: ${url}`);
+  const r = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = await r.json().catch(() => ({}));
+  const data = await r.json().catch(() => ({})) as any;
   if (!r.ok || !data?.uid) {
     const err = new Error(data?.error || "Pi auth failed");
     (err as { status?: number }).status = r.status || 401;
@@ -703,16 +705,20 @@ export async function handlePiA2uRequest(
   req: Request,
   parsedBody?: Record<string, unknown>,
 ): Promise<Response> {
+  console.log(`[pi-a2u] Incoming request: ${req.method}`);
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: corsHeaders });
 
   try {
     const body = parsedBody ?? ((await req.json().catch(() => ({}))) as Record<string, unknown>);
     const action = String(body?.action || "");
+    console.log(`[pi-a2u] Action: ${action}`);
 
     if (action === "auth_verify") {
       const token = String(body?.accessToken || "");
       if (!token) return json({ error: "Missing accessToken", action }, 400);
+      console.log(`[pi-a2u] Verifying Pi token...`);
       const user = await verifyPiAccessToken(token);
+      console.log(`[pi-a2u] Pi user verified: ${user.username}`);
       return json({ success: true, data: user });
     }
     if (action === "progress") {
@@ -726,18 +732,21 @@ export async function handlePiA2uRequest(
     if (action === "claim") {
       const token = String(body?.accessToken || "");
       if (!token) return json({ error: "Missing accessToken", action }, 401);
+      console.log(`[pi-a2u] Claim request received, verifying token...`);
       const user = await verifyPiAccessToken(token);
       const amount = Number(body?.amount ?? REWARD_AMOUNT);
       if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_CLAIM_AMOUNT) {
         return json({ error: `Invalid amount (max ${MAX_CLAIM_AMOUNT})` }, 400);
       }
       const memo = String(body?.memo || DEFAULT_MEMO);
+      console.log(`[pi-a2u] Processing claim for ${user.username} (amount: ${amount})`);
       return await handleClaim(user.uid, user.username, amount, memo);
     }
     return json({ error: "Invalid action" }, 400);
   } catch (error: unknown) {
     const status = (error as { status?: number })?.status ?? 500;
     const message = error instanceof Error ? error.message : "Unexpected error";
+    console.error(`[pi-a2u] Error handling request: ${message}`);
     return json({ error: message }, status);
   }
 }

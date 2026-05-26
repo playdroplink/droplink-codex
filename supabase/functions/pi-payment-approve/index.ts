@@ -7,8 +7,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore - ESM module (available at runtime)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Pi Network MAINNET API endpoint - PRODUCTION ONLY
-const PI_API_BASE_URL = "https://api.minepi.com";
+// Pi Network API endpoint - Dynamic based on environment
+const PI_NETWORK = Deno.env.get('PI_NETWORK') || 'testnet';
+const PI_API_BASE_URL = PI_NETWORK === 'testnet' ? "https://api.testnet.minepi.com" : "https://api.minepi.com";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,9 +73,9 @@ serve(async (req) => {
       );
     }
 
-    // Step 1: Get payment details from Pi API (MAINNET)
-    console.log('[APPROVAL] 📡 Fetching payment details from Pi MAINNET API...');
-    console.log('[APPROVAL] Network: MAINNET (Production Only)');
+    // Step 1: Get payment details from Pi API
+    console.log(`[APPROVAL] \u{1F4E1} Fetching payment details from Pi ${PI_NETWORK.toUpperCase()} API...`);
+    console.log(`[APPROVAL] Network: ${PI_NETWORK.toUpperCase()}`);
     const getPaymentResponse = await fetch(`${PI_API_BASE_URL}/v2/payments/${paymentId}`, {
       method: 'GET',
       headers: {
@@ -149,8 +150,8 @@ serve(async (req) => {
       console.warn('[APPROVAL] Idempotency record error:', err);
     }
 
-    // Step 2: Approve the payment with Pi MAINNET API
-    console.log('[APPROVAL] 📡 Approving payment with Pi MAINNET API...');
+    // Step 2: Approve the payment with Pi API
+    console.log(`[APPROVAL] \u{1F4E1} Approving payment with Pi ${PI_NETWORK.toUpperCase()} API...`);
     const approveResponse = await fetch(`${PI_API_BASE_URL}/v2/payments/${paymentId}/approve`, {
       method: 'POST',
       headers: {

@@ -7,8 +7,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore - ESM module (available at runtime)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Pi Network MAINNET API endpoint - PRODUCTION ONLY
-const PI_API_BASE_URL = "https://api.minepi.com";
+// Pi Network API endpoint - Dynamic based on environment
+const PI_NETWORK = Deno.env.get('PI_NETWORK') || 'testnet';
+const PI_API_BASE_URL = PI_NETWORK === 'testnet' ? "https://api.testnet.minepi.com" : "https://api.minepi.com";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -78,9 +79,9 @@ serve(async (req) => {
     
     console.log('[COMPLETE] Final metadata:', JSON.stringify(finalMetadata));
 
-    // Step 1: Get payment details from Pi MAINNET API to verify
-    console.log('[COMPLETE] 📡 Fetching payment details from Pi MAINNET API...');
-    console.log('[COMPLETE] Network: MAINNET (Production Only)');
+    // Step 1: Get payment details from Pi API to verify
+    console.log(`[COMPLETE] \u{1F4E1} Fetching payment details from Pi ${PI_NETWORK.toUpperCase()} API...`);
+    console.log(`[COMPLETE] Network: ${PI_NETWORK.toUpperCase()}`);
     const getPaymentResponse = await fetch(`${PI_API_BASE_URL}/v2/payments/${paymentId}`, {
       method: 'GET',
       headers: {
@@ -138,8 +139,8 @@ serve(async (req) => {
          console.log('[COMPLETE] ✅ Payment status verified: Ready for completion');
     }
 
-    // Step 2: Complete the payment with Pi MAINNET API
-    console.log('[COMPLETE] 📡 Completing payment with Pi MAINNET API...');
+    // Step 2: Complete the payment with Pi API
+    console.log(`[COMPLETE] \u{1F4E1} Completing payment with Pi ${PI_NETWORK.toUpperCase()} API...`);
     const completeResponse = await fetch(`${PI_API_BASE_URL}/v2/payments/${paymentId}/complete`, {
       method: 'POST',
       headers: {

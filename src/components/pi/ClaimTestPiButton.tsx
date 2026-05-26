@@ -30,25 +30,32 @@ export default function ClaimTestPiButton({ onSuccess, className }: Props) {
       return;
     }
     setClaiming(true);
+    console.log("[PI A2U] Starting claim flow...");
     try {
       let token = accessToken;
       if (!token) {
+        console.log("[PI A2U] No access token found, requesting sign-in...");
         const result = await signIn(["username", "payments", "wallet_address"]);
-        // If signIn returns the token directly (some versions of the context do)
         token = (result as any)?.accessToken || localStorage.getItem("pi_access_token");
       }
+      
       if (!token) {
-        throw new Error("Missing or invalid accessToken. Deploy edge functions (.\\deploy-pi-a2u.ps1), run the SQL migration, and set Supabase secrets. See PI_A2U_SETUP.md.");
+        throw new Error("Missing or invalid accessToken. Please sign in again.");
       }
+
+      console.log("[PI A2U] Token acquired, calling claimTestnetPi...");
       const result = await claimTestnetPi(token, {
         amount: DEFAULT_AMOUNT,
         memo: DEFAULT_MEMO,
       });
+      
+      console.log("[PI A2U] Claim successful:", result);
       setLastTxid(result.data.txid);
       setProgress(result.data.progress);
       toast.success(`Sent ${result.data.amount} Test Pi! TX: ${result.data.txid.slice(0, 12)}…`);
       onSuccess?.({ txid: result.data.txid, progress: result.data.progress });
     } catch (error) {
+      console.error("[PI A2U] Claim error:", error);
       const msg = error instanceof Error ? error.message : "Claim failed";
       if (msg.includes("already claimed")) {
         toast.error("You have already claimed this reward.");

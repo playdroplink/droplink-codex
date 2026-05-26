@@ -57,6 +57,7 @@ function isEdgeUnavailable(message: string): boolean {
 async function invokeViaFetch<T>(
   functionName: string,
   body: Record<string, unknown>,
+  retryCount = 0
 ): Promise<T> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -82,6 +83,8 @@ async function invokeViaFetch<T>(
     ? `${baseUrl}/${functionName}` 
     : `${baseUrl}/${functionName}${anonKey ? `?apikey=${encodeURIComponent(anonKey)}` : ""}`;
   
+  console.log(`[PI A2U] Fetching from: ${url.split('?')[0]} (Attempt ${retryCount + 1})`);
+  
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -94,22 +97,37 @@ async function invokeViaFetch<T>(
       body: JSON.stringify(body),
     });
 
-    const payload = await res.json().catch(() => ({}));
+    const text = await res.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (e) {
+      console.error("[PI A2U] Failed to parse response as JSON:", text.slice(0, 100));
+      throw new Error(`Invalid response format from server (HTTP ${res.status})`);
+    }
+
     if (!res.ok) {
       const errMsg =
-        (payload as { error?: string })?.error ||
-        (payload as { message?: string })?.message ||
+        payload?.error ||
+        payload?.message ||
         `HTTP ${res.status}`;
       throw new Error(errMsg);
     }
-    if ((payload as { error?: string })?.error) {
-      throw new Error((payload as { error: string }).error);
-    }
+    
     return payload as T;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[PI A2U] Request to ${functionName} failed:`, msg);
+    
+    // Retry once for network/CORS issues in Pi Browser
+    if (retryCount < 1 && (msg.includes('failed to fetch') || msg.includes('load failed') || msg.includes('NetworkError'))) {
+      console.log(`[PI A2U] Retrying ${functionName}...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return invokeViaFetch<T>(functionName, body, retryCount + 1);
+    }
+
     // Add environment context to the error for better user debugging
-    const context = `[UA: ${navigator.userAgent.slice(0, 30)}...]`;
+    const context = `[UA: ${navigator.userAgent.slice(0, 50)}...]`;
     throw new Error(`${msg} ${context} (Target: ${url.split("?")[0]})`);
   }
 }
