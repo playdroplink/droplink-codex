@@ -20,8 +20,8 @@ Write-Host "✅ Supabase CLI found" -ForegroundColor Green
 Write-Host ""
 
 # Pi Network Mainnet Credentials
-$PI_API_KEY = "ajm48wt1i2x4texoodypcs2rekfuoyrgg3hqowq2pefsfxqnixzlmbtztubzquuw"
-$PI_VALIDATION_KEY = "7511661aac4538b1832d2c9ba117f6d972b26a54640598d3fbb9824013c7079203f65b02d125be3f418605cfb89ba0e4443e3ec997e3800eb464df0bc5410d2a"
+$PI_API_KEY = "x62ea5gjqi4fv1x5cojbi84al9zzdstehnnm3tfzjlt4bol8pq1eohej2udoelhw"
+$PI_VALIDATION_KEY = "26ec4458680b98edc16b18ed68c2fb7841ee2c9d3b9cfdcfa82de36bea71f64074a2ee5d1fbea04762df431edb1458b44a2ff50679b16d93935b0b645e98174a"
 
 Write-Host "📋 Configuration Summary:" -ForegroundColor Cyan
 Write-Host "  API Key: $($PI_API_KEY.Substring(0, 20))..." -ForegroundColor White

@@ -20,7 +20,7 @@ if (typeof window !== 'undefined') {
 
 // Pi Network Credentials - From Pi Developer Portal
 const PI_APP_ID = import.meta.env.VITE_PI_APP_ID ?? "droplink-317d26f51b67e992";
-const PI_API_KEY = "zmdsfbedi4idcsniyy7ee1twwulq2cbruighxqgtqozyk6ph1fjswft69cddgqwk";
+const PI_API_KEY = "x62ea5gjqi4fv1x5cojbi84al9zzdstehnnm3tfzjlt4bol8pq1eohej2udoelhw";
 const PI_VALIDATION_KEY = "26ec4458680b98edc16b18ed68c2fb7841ee2c9d3b9cfdcfa82de36bea71f64074a2ee5d1fbea04762df431edb1458b44a2ff50679b16d93935b0b645e98174a";
 const PLATFORM_URL = import.meta.env.VITE_PLATFORM_URL ?? "https://droplink.space";
 const PAYMENT_RECEIVER_WALLET = import.meta.env.VITE_PI_PAYMENT_RECEIVER_WALLET ?? "GDSXE723WPHZ5RGIJCSYXTPKSOIGPTSXE4RF5U3JTNGTCHXON7ZVD4LJ";

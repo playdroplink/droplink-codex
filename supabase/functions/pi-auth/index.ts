@@ -1,3 +1,4 @@
+// @ts-nocheck
 // @ts-ignore-file - Deno edge function
 /// <reference lib="deno.ns" />
 declare const Deno: {
