@@ -146,10 +146,14 @@ export const validatePiConfig = (): boolean => {
 
 // Network-aware validation to ensure SDK/base URL align with sandbox flag
 export const validateMainnetConfig = (): boolean => {
-  const networkMatches = PI_CONFIG.SANDBOX_MODE ? PI_CONFIG.NETWORK === "sandbox" : PI_CONFIG.NETWORK === "mainnet";
-  const sdkMatches = PI_CONFIG.SDK.sandbox === PI_CONFIG.SANDBOX_MODE;
-  const baseUrlMatches = PI_CONFIG.SANDBOX_MODE
-    ? PI_CONFIG.BASE_URL.includes("sandbox") || PI_CONFIG.BASE_URL.includes("testnet")
+  const isTestnet = PI_CONFIG.SANDBOX_MODE;
+  const networkMatches = isTestnet 
+    ? (PI_CONFIG.NETWORK === "testnet" || PI_CONFIG.NETWORK === "sandbox")
+    : PI_CONFIG.NETWORK === "mainnet";
+  
+  const sdkMatches = PI_CONFIG.SDK.sandbox === isTestnet;
+  const baseUrlMatches = isTestnet
+    ? (PI_CONFIG.BASE_URL.includes("sandbox") || PI_CONFIG.BASE_URL.includes("testnet"))
     : PI_CONFIG.BASE_URL.includes("minepi.com");
 
   return validatePiConfig() && networkMatches && sdkMatches && baseUrlMatches;

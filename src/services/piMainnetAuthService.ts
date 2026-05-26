@@ -27,10 +27,7 @@ export async function validatePiAccessToken(accessToken: string) {
     // Direct Pi API validation
     const response = await fetch(`${PI_CONFIG.ENDPOINTS.ME}`, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
+      headers: PI_CONFIG.getAuthHeaders(accessToken),
     });
 
     if (!response.ok) {
