@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
+import { PiAuthProvider } from "@/contexts/PiAuthContext";
 import Dashboard from "./pages/Dashboard";
 import DashboardProfilePage from "./pages/dashboard/DashboardProfilePage";
 import DashboardDesignPage from "./pages/dashboard/DashboardDesignPage";
@@ -51,7 +52,7 @@ import CardGenerator from "./pages/CardGenerator";
 import PageLayout from "./components/PageLayout";
 import CommunityProgram from "./pages/CommunityProgram";
 import TestnetRewardPage from "./pages/TestnetRewardPage";
-import TestnetProgressPage from "./pages/admin/TestnetProgressPage";
+import TestnetProgressAdminPage from "./pages/admin/TestnetProgressAdminPage";
 
 const queryClient = new QueryClient();
 
@@ -140,7 +141,7 @@ const AppRoutes = ({ showSplash, setShowSplash }: { showSplash: boolean; setShow
         <Route path="/domain" element={<CustomDomain />} />
         <Route path="/admin-mrwain" element={<AdminMrwain />} />
         <Route path="/testnet-reward" element={<TestnetRewardPage />} />
-        <Route path="/admin/testnet-progress" element={<TestnetProgressPage />} />
+        <Route path="/admin/testnet-progress" element={<TestnetProgressAdminPage />} />
         {/* Payment routes */}
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/payment-cancel" element={<PaymentCancel />} />
@@ -195,20 +196,22 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true
-          }}
-        >
-          <div className="min-h-screen bg-gray-100 dark:bg-neutral-900">
-            <div className="w-full min-h-screen bg-background relative overflow-x-hidden">
-              <Toaster />
-              <Sonner />
-              <AppRoutes showSplash={showSplash} setShowSplash={setShowSplash} />
+        <PiAuthProvider>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true
+            }}
+          >
+            <div className="min-h-screen bg-gray-100 dark:bg-neutral-900">
+              <div className="w-full min-h-screen bg-background relative overflow-x-hidden">
+                <Toaster />
+                <Sonner />
+                <AppRoutes showSplash={showSplash} setShowSplash={setShowSplash} />
+              </div>
             </div>
-          </div>
-        </BrowserRouter>
+          </BrowserRouter>
+        </PiAuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

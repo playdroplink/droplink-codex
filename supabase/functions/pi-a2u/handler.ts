@@ -7,7 +7,6 @@ declare const Deno: {
   };
 };
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import PiNetwork from "npm:pi-backend@0.1.3";
 
 export const A2U_ACTIONS = new Set(["auth_verify", "progress", "admin_dashboard", "claim"]);
 
@@ -40,14 +39,9 @@ const PI_API_KEY = cleanSecret(Deno.env.get("PI_A2U_API_KEY") || Deno.env.get("P
 const PI_WALLET_SEED = cleanSecret(Deno.env.get("PI_WALLET_PRIVATE_SEED"));
 const PI_NETWORK = cleanSecret(Deno.env.get("PI_NETWORK") || "testnet");
 
-// Explicitly set the API URL in the environment so the SDK picks it up
 const PI_API_URL = PI_NETWORK === "testnet" 
   ? "https://api.testnet.minepi.com" 
   : "https://api.minepi.com";
-
-// Some SDK versions use process.env, Deno shim handles some of this
-// but we set it explicitly here to be safe
-Deno.env.set("PI_API_URL", PI_API_URL);
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -152,7 +146,7 @@ function makeLogger(uid?: string, username?: string, amount = REWARD_AMOUNT, mem
     logDiagnostic({ uid, username, level, message, details, amount, memo });
 }
 
-function getPiClient(): PiClient {
+async function getPiClient(): Promise<PiClient> {
   if (!PI_API_KEY) {
     throw new Error("Missing PI_A2U_API_KEY. Set it via: npx supabase secrets set PI_A2U_API_KEY=...");
   }
@@ -161,6 +155,12 @@ function getPiClient(): PiClient {
   }
   
   console.log(`[PiA2U] Initializing PiNetwork SDK for network: ${PI_NETWORK}`);
+  try {
+    Deno.env.set("PI_API_URL", PI_API_URL);
+  } catch (error) {
+    console.warn("[PiA2U] Could not set PI_API_URL env for SDK", error);
+  }
+  const { default: PiNetwork } = await import("npm:pi-backend@0.1.3");
   
   const PiCtor: new (k: string, s: string, n: string) => PiClient =
     ((PiNetwork as unknown as { default?: new (k: string, s: string, n: string) => PiClient }).default ??
@@ -595,7 +595,7 @@ async function handleClaim(uid: string, username: string, amount: number, memo: 
     return json({ error: "Testnet goal reached: 10 unique wallets completed.", progress }, 409);
   }
 
-  const pi = getPiClient();
+  const pi = await getPiClient();
   await logStep("info", "Pi backend client initialized", {
     configured_wallet: getConfiguredWalletAddress(pi) || null,
   });

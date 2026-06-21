@@ -1,131 +1,169 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { AlertTriangle, ExternalLink, Gift } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { AlertCircle, CheckCircle, Zap } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import ClaimTestPiButton from "@/components/pi/ClaimTestPiButton";
-import { FooterNav } from "@/components/FooterNav";
-import { PageHeader } from "@/components/PageHeader";
-import { isPiBrowserEnv, usePi } from "@/contexts/PiContext";
-import { fetchWalletProgress, type WalletProgress } from "@/lib/piA2uApi";
+import { usePiAuth } from "@/contexts/PiAuthContext";
+import { fetchWalletProgress, type WalletProgress } from "@/lib/piApi";
 
-const TestnetRewardPage = () => {
-  const { isAuthenticated, signIn, loading } = usePi();
-  const inPiBrowser = isPiBrowserEnv();
+export default function TestnetRewardPage() {
+  const { inPiBrowser, session, loading } = usePiAuth();
   const [progress, setProgress] = useState<WalletProgress | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    fetchWalletProgress()
-      .then(setProgress)
-      .catch((e) => {
-        console.error("[TestnetReward] Load error:", e);
-        setLoadError(e instanceof Error ? e.message : "Could not load progress");
-      });
+    const loadProgress = async () => {
+      try {
+        const data = await fetchWalletProgress();
+        setProgress(data);
+      } catch (error) {
+        console.error("Failed to load progress:", error);
+      } finally {
+        setProgressLoading(false);
+      }
+    };
+
+    loadProgress();
+    const interval = setInterval(loadProgress, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
   }, []);
 
-  const handleRetry = () => {
-    setLoadError(null);
-    fetchWalletProgress()
-      .then(setProgress)
-      .catch((e) => setLoadError(e instanceof Error ? e.message : "Could not load progress"));
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white pb-24">
-      <PageHeader title="Testnet Reward" showBackButton />
-      <div className="mx-auto max-w-lg px-4 py-6 space-y-4">
-        <Card className="border-sky-100 shadow-sm">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/50 py-8 px-4">
+      <div className="max-w-2xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl font-bold">🎁 Testnet Rewards</h1>
+          <p className="text-lg text-muted-foreground">
+            Claim Test Pi to help your app qualify for Pi Mainnet wallet approval
+          </p>
+        </div>
+
+        {/* Warning if not in Pi Browser */}
+        {!inPiBrowser && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              You are not in Pi Browser. To claim Test Pi, open this page inside Pi Browser.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Progress Card */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sky-800">
-              <Gift className="h-5 w-5" />
-              Claim Test Pi (A2U)
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Progress
             </CardTitle>
-            <CardDescription>
-              Send App-to-User Test Pi to 10 unique Pioneer wallets to qualify for Mainnet wallet
-              approval. Open this page in Pi Browser, sign in, then tap Claim.
-            </CardDescription>
+            <CardDescription>Unique wallets that have received Test Pi</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {progress && (
-              <div className="rounded-xl bg-sky-50 px-4 py-3 text-center">
-                <p className="text-2xl font-bold text-sky-700">
-                  {progress.unique_wallets} / {progress.target}
-                </p>
-                <p className="text-sm text-sky-600">{progress.progress_label}</p>
-                {progress.completed && (
-                  <p className="mt-1 text-xs font-medium text-emerald-600">Goal complete</p>
-                )}
-              </div>
-            )}
-
-            {loadError && (
-              <div className="space-y-3">
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Connection Problem</AlertTitle>
-                  <AlertDescription className="text-xs break-all">
-                    {loadError}
-                  </AlertDescription>
-                </Alert>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full text-xs" 
-                  onClick={handleRetry}
-                >
-                  Retry Connection
-                </Button>
-                <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-[10px] text-amber-800 space-y-1">
-                  <p className="font-bold">Troubleshooting Check:</p>
-                  <p>1. Open this in <b>Pi Browser</b>, not a regular browser.</p>
-                  <p>2. Ensure <b>.\deploy-pi-a2u.ps1</b> was run on your project.</p>
-                  <p>3. If using VPN or proxy, try disabling it.</p>
+            {progressLoading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading progress...</div>
+            ) : progress ? (
+              <>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">
+                      {progress.unique_wallets} / {progress.target}
+                    </span>
+                    <span className="text-sm text-muted-foreground">{Math.round((progress.unique_wallets / progress.target) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div
+                      className="bg-primary h-2 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min((progress.unique_wallets / progress.target) * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
                 </div>
+                {progress.completed && (
+                  <Alert className="border-green-200 bg-green-50 dark:bg-green-950">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800 dark:text-green-200">
+                      ✅ Goal reached! Your app has met the testnet requirements.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        {/* Claim Card */}
+        {!progress?.completed && inPiBrowser && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Claim Test Pi</CardTitle>
+              <CardDescription>
+                Connect your Pi account and claim your testnet reward
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">Initializing Pi SDK...</div>
+              ) : !session ? (
+                <p className="text-sm text-muted-foreground">
+                  You need to sign in with your Pi account to claim rewards.
+                </p>
+              ) : null}
+
+              <ClaimTestPiButton
+                onSuccess={() => {
+                  setTimeout(() => {
+                    fetchWalletProgress().then(setProgress).catch(console.error);
+                  }, 1000);
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Info Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>How It Works</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="space-y-2">
+              <div className="flex gap-3">
+                <span className="font-semibold min-w-fit">1️⃣ Sign In</span>
+                <span className="text-muted-foreground">
+                  Open this page in Pi Browser and sign in with your Pi account
+                </span>
               </div>
-            )}
-
-            {!inPiBrowser && (
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Pi Browser required</AlertTitle>
-                <AlertDescription>
-                  A2U claims only work inside Pi Browser. Open droplink.space in Pi Browser to
-                  continue.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {!isAuthenticated && inPiBrowser && (
-              <Button
-                className="w-full rounded-2xl"
-                variant="outline"
-                disabled={loading}
-                onClick={() => void signIn(["username", "payments", "wallet_address"])}
-              >
-                Sign in with Pi
-              </Button>
-            )}
-
-            <ClaimTestPiButton
-              onSuccess={({ progress: p }) => setProgress(p)}
-            />
-
-            <div className="flex flex-col gap-2 pt-2">
-              <Link
-                to="/admin/testnet-progress"
-                className="inline-flex items-center justify-center gap-1 text-sm text-sky-600 hover:underline"
-              >
-                View admin progress <ExternalLink className="h-3 w-3" />
-              </Link>
+              <div className="flex gap-3">
+                <span className="font-semibold min-w-fit">2️⃣ Claim Reward</span>
+                <span className="text-muted-foreground">
+                  Click the "Claim Test Pi" button to receive 0.01 Test Pi
+                </span>
+              </div>
+              <div className="flex gap-3">
+                <span className="font-semibold min-w-fit">3️⃣ Track Progress</span>
+                <span className="text-muted-foreground">
+                  Progress is tracked above. When you reach 10 unique wallets, the testnet goal is complete
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Admin Link */}
+        <div className="text-center">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/admin/testnet-progress")}
+            className="gap-2"
+          >
+            View Admin Dashboard →
+          </Button>
+        </div>
       </div>
-      <FooterNav />
     </div>
   );
-};
-
-export default TestnetRewardPage;
+}

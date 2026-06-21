@@ -85,7 +85,7 @@ class SecureLogger {
   constructor(options: SecureLogOptions = {}) {
     this.options = {
       maskSensitive: true,
-      environment: process.env.NODE_ENV as 'development' | 'production' || 'development',
+      environment: (import.meta.env.MODE as 'development' | 'production') || 'development',
       ...options,
     };
   }
@@ -100,7 +100,7 @@ class SecureLogger {
 
   private shouldLog(): boolean {
     // In production, reduce logging unless explicitly needed
-    return this.options.environment === 'development' || process.env.VITE_ENABLE_PRODUCTION_LOGS === 'true';
+    return this.options.environment === 'development' || import.meta.env.VITE_ENABLE_PRODUCTION_LOGS === 'true';
   }
 
   log(...args: any[]): void {
@@ -121,7 +121,7 @@ class SecureLogger {
   }
 
   debug(...args: any[]): void {
-    if (this.shouldLog() && (process.env.VITE_DEBUG_LOGS === 'true' || this.options.environment === 'development')) {
+    if (this.shouldLog() && (import.meta.env.VITE_DEBUG_LOGS === 'true' || this.options.environment === 'development')) {
       console.debug(...this.processArgs(args));
     }
   }
@@ -130,7 +130,7 @@ class SecureLogger {
    * Log environment variable status without exposing values
    */
   logEnvStatus(envName: string, value?: string): void {
-    const hasValue = !!(value || process.env[envName]);
+    const hasValue = !!(value || import.meta.env[envName]);
     const prefix = envName.startsWith('VITE_') ? '[CLIENT ENV]' : '[SERVER ENV]';
     
     if (hasValue) {

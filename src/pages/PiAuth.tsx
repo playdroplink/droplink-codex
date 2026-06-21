@@ -19,10 +19,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 const PiAuth = () => {
   const [showPiBrowserNotice, setShowPiBrowserNotice] = useState(false);
+  const [showEcosystemModal, setShowEcosystemModal] = useState(false);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { preferences, updatePreference } = useUserPreferences();
-  const [showEcosystemModal, setShowEcosystemModal] = useState(false);
   const { signIn, isAuthenticated, loading: piLoading } = usePi();
   const [searchParams] = useSearchParams();
   const [refInput, setRefInput] = useState("");
@@ -218,15 +218,6 @@ const PiAuth = () => {
             <a href="https://minepi.com/Wain2020" target="_blank" rel="noopener noreferrer">
               Download Pi Browser
             </a>
-          </Button>
-
-          {/* Ecosystem Overview */}
-          <Button
-            variant="outline"
-            className="w-full text-base font-semibold"
-            onClick={() => setShowEcosystemModal(true)}
-          >
-            Drop Ecosystem
           </Button>
 
           <div className="space-y-2 text-sm text-muted-foreground mt-4 p-3 rounded-lg border bg-slate-100 border-slate-300">
