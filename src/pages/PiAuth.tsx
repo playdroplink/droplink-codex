@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Gift } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AboutModal } from "@/components/AboutModal";
@@ -24,18 +22,8 @@ const PiAuth = () => {
   const [loading, setLoading] = useState(false);
   const { preferences, updatePreference } = useUserPreferences();
   const { signIn, isAuthenticated, loading: piLoading } = usePi();
-  const [searchParams] = useSearchParams();
-  const [refInput, setRefInput] = useState("");
 
   useEffect(() => {
-    // Capture referral code from URL
-    const refCode = searchParams.get("ref");
-    if (refCode) {
-      console.log("Captured referral code:", refCode);
-      localStorage.setItem("referral_code", refCode);
-      setRefInput(refCode);
-    }
-
     // Check if user is already authenticated
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -157,22 +145,6 @@ const PiAuth = () => {
             )}
           </Button>
 
-          <div className="space-y-2">
-            <Label htmlFor="referral" className="text-sm text-muted-foreground">Referral code or username (optional)</Label>
-            <Input
-              id="referral"
-              placeholder="Enter referral code or Pi username"
-              value={refInput}
-              onChange={(e) => {
-                const value = e.target.value.trim();
-                setRefInput(value);
-                if (value) {
-                  localStorage.setItem("referral_code", value);
-                }
-              }}
-            />
-          </div>
-
           {/* Go to Landing Page Button */}
           <Button
             asChild
@@ -183,17 +155,6 @@ const PiAuth = () => {
             <a href="https://www.droplink.space" target="_blank" rel="noopener noreferrer">
               Visit Droplink Landing Page
             </a>
-          </Button>
-
-          {/* Pi A2U Testnet reward */}
-          <Button
-            className="w-full mb-2 text-white text-base font-semibold bg-emerald-600 hover:bg-emerald-700"
-            size="lg"
-            variant="default"
-            onClick={() => navigate('/testnet-reward')}
-          >
-            <Gift className="w-4 h-4 mr-2" />
-            Claim Test Pi (A2U)
           </Button>
 
           {/* Droplink Social Button */}
@@ -262,14 +223,6 @@ const PiAuth = () => {
               <DropPayModal>
                 <button className="text-primary hover:underline cursor-pointer">DropPay</button>
               </DropPayModal>
-              <span className="text-muted-foreground">•</span>
-              <button
-                type="button"
-                className="text-primary hover:underline cursor-pointer"
-                onClick={() => navigate('/testnet-reward')}
-              >
-                A2U Reward
-              </button>
             </div>
             <div className="flex flex-wrap justify-center gap-2 text-xs">
               <a href="/terms" className="text-primary hover:underline">Terms</a>

@@ -51,8 +51,6 @@ import SalesEarnings from "./pages/SalesEarnings";
 import CardGenerator from "./pages/CardGenerator";
 import PageLayout from "./components/PageLayout";
 import CommunityProgram from "./pages/CommunityProgram";
-import TestnetRewardPage from "./pages/TestnetRewardPage";
-import TestnetProgressAdminPage from "./pages/admin/TestnetProgressAdminPage";
 
 const queryClient = new QueryClient();
 
@@ -140,8 +138,6 @@ const AppRoutes = ({ showSplash, setShowSplash }: { showSplash: boolean; setShow
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/domain" element={<CustomDomain />} />
         <Route path="/admin-mrwain" element={<AdminMrwain />} />
-        <Route path="/testnet-reward" element={<TestnetRewardPage />} />
-        <Route path="/admin/testnet-progress" element={<TestnetProgressAdminPage />} />
         {/* Payment routes */}
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/payment-cancel" element={<PaymentCancel />} />
